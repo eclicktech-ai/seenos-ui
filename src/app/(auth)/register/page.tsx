@@ -52,7 +52,8 @@ export default function RegisterPage() {
 
       try {
         await register(email, password, inviteCode, name || undefined);
-        router.push("/");
+        // 注册成功后跳转到成功页面
+        router.push("/register/success");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Registration failed. Please try again.");
       } finally {

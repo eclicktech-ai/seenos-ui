@@ -63,9 +63,8 @@ export interface RegisterRequest {
 
 /** 注册响应 */
 export interface RegisterResponse {
-  token: string;
-  user: User;
-  settings: UserSettings;
+  success: boolean;
+  message: string;
 }
 
 /** 当前用户响应 */
@@ -375,9 +374,7 @@ class ApiClient {
 
   /** 用户注册 */
   async register(request: RegisterRequest): Promise<RegisterResponse> {
-    const data = await this.post<RegisterResponse>('/auth/register', request);
-    this.setToken(data.token);
-    return data;
+    return this.post<RegisterResponse>('/auth/register', request);
   }
 
   /** 退出登录 */

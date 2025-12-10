@@ -233,58 +233,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, []);
 
-  // 注册
+  // 注册（注册成功后不自动登录，需要用户手动登录）
   const register = useCallback(async (email: string, password: string, inviteCode: string, name?: string) => {
-    setState((prev) => ({ ...prev, isLoading: true }));
-
-    try {
-      const response = await apiClient.register({
-        email,
-        password,
-        inviteCode,
-        name,
-      });
-
-      const { token, user: apiUser, settings: apiSettings } = response;
-      
-      // 转换为应用内部类型
-      const user: User = {
-        id: apiUser.id,
-        email: apiUser.email,
-        name: apiUser.name || '',
-        avatar: apiUser.avatar || undefined,
-      };
-      
-      const settings: UserSettings = {
-        mainAgentModel: apiSettings.orchestratorModel || '',
-        subAgentModel: apiSettings.defaultSubagentModel || '',
-        enabledTools: apiSettings.enabledTools || [],
-        theme: apiSettings.theme || 'light',
-        contextEnabled: apiSettings.contextEnabled,
-        contextMaxChunks: apiSettings.contextMaxChunks,
-        contextSimilarityThreshold: apiSettings.contextSimilarityThreshold,
-        showTokenUsage: apiSettings.showTokenUsage,
-      };
-
-      // 保存到本地存储
-      localStorage.setItem(TOKEN_KEY, token);
-      localStorage.setItem(USER_KEY, JSON.stringify(user));
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-
-      // 设置 API 客户端 token
-      apiClient.setToken(token);
-
-      setState({
-        user,
-        settings,
-        token,
-        isLoading: false,
-        isAuthenticated: true,
-      });
-    } catch (error) {
-      setState((prev) => ({ ...prev, isLoading: false }));
-      throw error;
-    }
+    // 调用注册 API，成功后返回，失败会抛出错误
+    await apiClient.register({
+      email,
+      password,
+      inviteCode,
+      name,
+    });
   }, []);
 
   // 登出
