@@ -189,17 +189,33 @@ export function AuthProvider({ children }: AuthProviderProps) {
         password,
       });
 
-      const { token, user, settings, isAdmin } = response;
+      const { token, user } = response;
+
+      // 设置 API 客户端 token（需要在调用 /auth/me 之前设置）
+      apiClient.setToken(token);
+
+      // 登录响应可能不包含完整信息（如 isAdmin），调用 /auth/me 获取完整数据
+      // /auth/me 返回的 settings 更完整，包含 showTokenUsage 等字段
+      let isAdmin = false;
+      let settings = response.settings;
+      try {
+        const meResponse = await apiClient.get<{ user: User; settings: UserSettings; isAdmin?: boolean }>(
+          "/auth/me"
+        );
+        isAdmin = meResponse.isAdmin ?? false;
+        // 使用 /auth/me 返回的 settings，它包含更完整的字段
+        settings = meResponse.settings;
+      } catch (err) {
+        console.warn('[AuthProvider] Failed to get data from /auth/me:', err);
+      }
+
       // 将 isAdmin 合并到 user 对象中
-      const userWithAdmin: User = { ...user, isAdmin: isAdmin ?? false };
+      const userWithAdmin: User = { ...user, isAdmin };
 
       // 保存到本地存储
       localStorage.setItem(TOKEN_KEY, token);
       localStorage.setItem(USER_KEY, JSON.stringify(userWithAdmin));
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-
-      // 设置 API 客户端 token
-      apiClient.setToken(token);
 
       setState({
         user: userWithAdmin,
@@ -304,6 +320,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       // 更新本地存储
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
+
+      // 触发自定义事件，通知同一页面内的其他组件设置已更新
+      window.dispatchEvent(new CustomEvent("settings-updated"));
 
       setState((prev) => ({ ...prev, settings: updated }));
     } catch (error) {

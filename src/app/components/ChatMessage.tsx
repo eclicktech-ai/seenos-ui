@@ -91,13 +91,22 @@ const CitationsSection = React.memo<{ citations: ContextSearchResult[] }>(({ cit
 CitationsSection.displayName = "CitationsSection";
 
 // Token Usage 组件 - 显示 token 使用量
-const TokenUsageDisplay = React.memo<{ usage: TokenUsageSummary }>(({ usage }) => {
-  // 确保 usage 和 totalTokens 都存在
-  if (!usage || typeof usage.totalTokens !== 'number' || usage.totalTokens === 0) return null;
+// 兼容两种格式：
+// 1. 后端历史消息格式: { promptTokens, completionTokens, totalCost }
+// 2. 前端完整格式: { totalTokens, promptTokens, completionTokens, totalCost, callCount }
+const TokenUsageDisplay = React.memo<{ usage: TokenUsageSummary | { promptTokens?: number; completionTokens?: number; totalCost?: number } }>(({ usage }) => {
+  if (!usage) return null;
 
-  const totalTokens = usage.totalTokens ?? 0;
-  const totalCost = usage.totalCost ?? 0;
-  const callCount = usage.callCount ?? 1;
+  // 计算 totalTokens：优先使用 totalTokens，否则用 promptTokens + completionTokens
+  const promptTokens = (usage as TokenUsageSummary).promptTokens ?? 0;
+  const completionTokens = (usage as TokenUsageSummary).completionTokens ?? 0;
+  const totalTokens = (usage as TokenUsageSummary).totalTokens ?? (promptTokens + completionTokens);
+  
+  // 如果没有任何 token 数据，不显示
+  if (totalTokens === 0) return null;
+
+  const totalCost = (usage as TokenUsageSummary).totalCost ?? 0;
+  const callCount = (usage as TokenUsageSummary).callCount ?? 1;
 
   return (
     <div className="mt-2 flex items-center gap-2 text-[10px] text-muted-foreground">
@@ -165,36 +174,48 @@ export const ChatMessage = React.memo<ChatMessageProps>(
     animate = false,
   }) => {
     // 从 localStorage 读取 showTokenUsage 设置
+    // AuthProvider 在登录和更新设置时会同步更新 localStorage
     // 默认开启 token 显示
+    const SETTINGS_KEY = "deep_agents_settings";
     const [showTokenUsage, setShowTokenUsage] = useState(true);
     
     useEffect(() => {
-      // 从 localStorage 读取设置，如果没有设置则默认开启
-      try {
-        const settings = localStorage.getItem("userSettings");
-        if (settings) {
-          const parsed = JSON.parse(settings);
-          // 只有明确设置为 false 时才关闭
-          setShowTokenUsage(parsed.showTokenUsage !== false);
-        }
-      } catch {
-        // 忽略解析错误，保持默认开启
-      }
-      
-      // 监听 storage 变化（当设置在其他地方更新时）
-      const handleStorageChange = (e: StorageEvent) => {
-        if (e.key === "userSettings" && e.newValue) {
-          try {
-            const parsed = JSON.parse(e.newValue);
+      // 从 localStorage 读取设置
+      const loadSettings = () => {
+        try {
+          const settings = localStorage.getItem(SETTINGS_KEY);
+          if (settings) {
+            const parsed = JSON.parse(settings);
+            // 只有明确设置为 false 时才关闭
             setShowTokenUsage(parsed.showTokenUsage !== false);
-          } catch {
-            // 忽略解析错误
           }
+        } catch {
+          // 忽略解析错误，保持默认开启
         }
       };
       
+      // 初始加载
+      loadSettings();
+      
+      // 监听 storage 变化（当设置在其他地方更新时，如设置页面）
+      const handleStorageChange = (e: StorageEvent) => {
+        if (e.key === SETTINGS_KEY) {
+          loadSettings();
+        }
+      };
+      
+      // 监听自定义事件（同一页面内的设置更新）
+      const handleSettingsUpdate = () => {
+        loadSettings();
+      };
+      
       window.addEventListener("storage", handleStorageChange);
-      return () => window.removeEventListener("storage", handleStorageChange);
+      window.addEventListener("settings-updated", handleSettingsUpdate);
+      
+      return () => {
+        window.removeEventListener("storage", handleStorageChange);
+        window.removeEventListener("settings-updated", handleSettingsUpdate);
+      };
     }, []);
     
     // 兼容 type 和 role 两种格式

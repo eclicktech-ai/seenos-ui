@@ -327,10 +327,14 @@ export function SettingsDialog({ open, onOpenChange, isAdmin: isAdminProp }: Set
     isAdmin,
   };
 
+  // 使用 isAdmin 作为 key，当权限变化时强制重新挂载 SettingsProvider
+  // 这样可以确保内部组件使用最新的权限配置
+  const providerKey = `settings-${isAdmin ? 'admin' : 'user'}`;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="!max-w-6xl flex h-[85vh] flex-col gap-0 overflow-hidden p-0" showCloseButton={false}>
-        <SettingsProvider permissions={permissions}>
+        <SettingsProvider key={providerKey} permissions={permissions}>
           <SettingsContent onOpenChange={onOpenChange} />
         </SettingsProvider>
       </DialogContent>
