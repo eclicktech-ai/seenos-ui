@@ -135,7 +135,7 @@ function AuthenticatedHome() {
         <header className="flex h-14 flex-shrink-0 items-center justify-between border-b border-border px-4">
           <div className="flex items-center gap-2">
             <Image
-              src="/logo-icon.svg"
+              src={theme === "dark" ? "/logo-dark.svg" : "/logo-icon.svg"}
               alt="SeenOS"
               width={28}
               height={28}

@@ -1,12 +1,27 @@
 <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- SeenOS Icon - Simplified version - Pure Grayscale -->
-  <circle cx="32" cy="32" r="28" stroke="#4a4a4a" stroke-width="3" fill="none"/>
-  <circle cx="32" cy="32" r="16" fill="#e5e5e5"/>
-  <circle cx="32" cy="32" r="8" fill="#1f1f1f"/>
-  
-  <!-- Simplified circuit dots - all grayscale -->
-  <circle cx="32" cy="26" r="2" fill="#6b7280"/>
-  <circle cx="38" cy="32" r="1.5" fill="#6b7280"/>
-  <circle cx="32" cy="38" r="2" fill="#6b7280"/>
-  <circle cx="26" cy="32" r="1.5" fill="#6b7280"/>
+  <!-- SeenOS Icon - Abstract Letterform -->
+  <g transform="translate(32, 32)">
+    <!-- Main abstract "S" -->
+    <path d="M -16 -14 
+             C -16 -14, 11 -14, 11 -8
+             C 11 -2, -16 -2, -16 5
+             C -16 12, 11 12, 11 14" 
+          stroke="#1f1f1f" 
+          stroke-width="4" 
+          stroke-linecap="round" 
+          stroke-linejoin="round"
+          fill="none"/>
+    
+    <!-- Perception accent -->
+    <ellipse cx="0" cy="0" rx="12" ry="8" 
+             stroke="#4a4a4a" 
+             stroke-width="0.8" 
+             fill="none" 
+             opacity="0.4"
+             transform="rotate(-15)"/>
+    
+    <!-- Accent dots -->
+    <circle cx="-16" cy="-14" r="1.5" fill="#1f1f1f"/>
+    <circle cx="11" cy="14" r="1.5" fill="#1f1f1f"/>
+  </g>
 </svg>

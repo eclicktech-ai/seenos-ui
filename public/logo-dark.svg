@@ -1,21 +1,38 @@
 <svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- SeenOS Logo - Dark Theme Version - Pure Grayscale -->
-  <circle cx="100" cy="100" r="80" stroke="#737373" stroke-width="8" fill="none"/>
-  <circle cx="100" cy="100" r="50" fill="#404040"/>
-  <circle cx="100" cy="100" r="25" fill="#0a0a0a"/>
-  
-  <!-- Digital/circuit dots - all grayscale -->
-  <circle cx="100" cy="85" r="4" fill="#a3a3a3"/>
-  <circle cx="112" cy="100" r="3" fill="#a3a3a3"/>
-  <circle cx="100" cy="115" r="4" fill="#a3a3a3"/>
-  <circle cx="88" cy="100" r="3" fill="#a3a3a3"/>
-  
-  <!-- Connecting lines -->
-  <line x1="100" y1="85" x2="100" y2="75" stroke="#a3a3a3" stroke-width="2"/>
-  <line x1="112" y1="100" x2="122" y2="100" stroke="#a3a3a3" stroke-width="2"/>
-  <line x1="100" y1="115" x2="100" y2="125" stroke="#a3a3a3" stroke-width="2"/>
-  <line x1="88" y1="100" x2="78" y2="100" stroke="#a3a3a3" stroke-width="2"/>
-  
-  <!-- Highlight arc -->
-  <path d="M 60 70 Q 70 50 100 45" stroke="#737373" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.6"/>
+  <!-- SeenOS Logo Dark - Abstract Letterform with Perception Elements -->
+  <g transform="translate(100, 100)">
+    <!-- Main abstract "S" letterform - pure white for maximum contrast -->
+    <path d="M -50 -45 
+             C -50 -45, 35 -45, 35 -25
+             C 35 -5, -50 -5, -50 15
+             C -50 35, 35 35, 35 45" 
+          stroke="#ffffff" 
+          stroke-width="14" 
+          stroke-linecap="round" 
+          stroke-linejoin="round"
+          fill="none"/>
+    
+    <!-- Subtle perception-inspired accent - brighter for visibility -->
+    <ellipse cx="0" cy="0" rx="38" ry="25" 
+             stroke="#f5f5f5" 
+             stroke-width="2.5" 
+             fill="none" 
+             opacity="0.8"
+             transform="rotate(-15)"/>
+    
+    <!-- Minimal dot accents - pure white -->
+    <circle cx="-50" cy="-45" r="5" fill="#ffffff"/>
+    <circle cx="35" cy="45" r="5" fill="#ffffff"/>
+    
+    <!-- Subtle inner highlight on S for depth -->
+    <path d="M -45 -40 
+             C -45 -40, 30 -40, 30 -22
+             C 30 -4, -45 -4, -45 12
+             C -45 28, 30 28, 30 40" 
+          stroke="#ffffff" 
+          stroke-width="3" 
+          stroke-linecap="round" 
+          fill="none"
+          opacity="0.4"/>
+  </g>
 </svg>
