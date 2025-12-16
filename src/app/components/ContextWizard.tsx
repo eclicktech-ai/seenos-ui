@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useContextMenu } from "@/providers/ContextProvider";
-import { Plus, X, Link, Link2, Briefcase, ShoppingBag, Layout, Users, Megaphone, Share2, MessageSquare, TrendingUp, Target, Globe, FileText, Rss, Map, Palette, BookOpen, Flag, AlertTriangle, Zap, Building2, Star, UserCircle, Info, HelpCircle, BarChart3, Database, Folder, Monitor, Handshake, Twitter, Instagram, Linkedin, Youtube, Github, Facebook, Newspaper, Network, Calendar, Mic, Video, Save, Cloud, Upload } from "lucide-react";
+import { Plus, X, Link2, ShoppingBag, Layout, Users, Megaphone, MessageSquare, Target, Globe, FileText, Rss, Map, Palette, BookOpen, Flag, AlertTriangle, Zap, Building2, Star, UserCircle, Info, HelpCircle, Newspaper, Network, Save, Cloud, Upload } from "lucide-react";
 import { v4 as uuidv4 } from 'uuid';
 import {
   LandingPage,
@@ -37,22 +37,12 @@ import {
   CommunityForum,
   QAPlatform,
   MediaSource,
-  VideoPlatform,
-  PodcastNewsletter,
   ReviewPlatform,
-  AppStore,
-  VerticalReviewSite,
   EcommercePlatform,
-  CompetitorConfig,
   InfluencerAccount,
-  AlertRule,
   ProfessionalNetwork,
-  SearchEngineTracking,
-  SERPCompetitor,
   DirectoryListing,
   ExecutiveAccount,
-  PartnerAccount,
-  GuestPost,
   BacklinkSource,
   ExternalEvent,
 } from "@/app/types/context";
@@ -338,7 +328,7 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
     );
   };
 
-  const renderLandingPage = (item: LandingPage, onChange: (i: LandingPage) => void) => (
+  const _renderLandingPage = (item: LandingPage, onChange: (i: LandingPage) => void) => (
     <div className="grid gap-3">
       <Input
         placeholder="Page Name (e.g. Summer Campaign)"
@@ -367,7 +357,7 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
     </div>
   );
 
-  const renderWebsiteContent = (item: WebsiteContent, onChange: (i: WebsiteContent) => void) => (
+  const _renderWebsiteContent = (item: WebsiteContent, onChange: (i: WebsiteContent) => void) => (
     <div className="grid gap-3">
       <div className="flex gap-2">
         <select
@@ -422,7 +412,7 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
     </div>
   );
 
-  const renderOfficialAccount = (item: OfficialAccount, onChange: (i: OfficialAccount) => void) => (
+  const _renderOfficialAccount = (item: OfficialAccount, onChange: (i: OfficialAccount) => void) => (
     <div className="grid gap-3">
       <div className="flex gap-2">
         <select
@@ -455,7 +445,7 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
     </div>
   );
 
-  const renderPartnership = (item: Partnership, onChange: (i: Partnership) => void) => (
+  const _renderPartnership = (item: Partnership, onChange: (i: Partnership) => void) => (
     <div className="grid gap-3">
       <Input
         placeholder="Partner Name"
@@ -488,7 +478,7 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
     </div>
   );
 
-  const renderCustomerReview = (item: CustomerReview, onChange: (i: CustomerReview) => void) => (
+  const _renderCustomerReview = (item: CustomerReview, onChange: (i: CustomerReview) => void) => (
     <div className="grid gap-3">
       <div className="flex gap-2">
         <Input
@@ -514,7 +504,7 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
     </div>
   );
 
-  const renderCompetitor = (item: Competitor, onChange: (i: Competitor) => void) => (
+  const _renderCompetitor = (item: Competitor, onChange: (i: Competitor) => void) => (
     <div className="grid gap-3">
       <Input
         placeholder="Competitor Name"
@@ -548,7 +538,7 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
     </div>
   );
 
-  const renderPersona = (item: AudiencePersona, onChange: (i: AudiencePersona) => void) => (
+  const _renderPersona = (item: AudiencePersona, onChange: (i: AudiencePersona) => void) => (
     <div className="grid gap-3">
       <Input
         placeholder="Persona Name (e.g. Tech-Savvy Tina)"
@@ -571,7 +561,7 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
     </div>
   );
 
-  const renderMarketIntel = (item: MarketIntelligence, onChange: (i: MarketIntelligence) => void) => (
+  const _renderMarketIntel = (item: MarketIntelligence, onChange: (i: MarketIntelligence) => void) => (
     <div className="grid gap-3">
       <Input
         placeholder="Report Title / Trend"
@@ -621,7 +611,7 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
     </div>
   );
 
-  const renderPressRelease = (item: PressRelease, onChange: (i: PressRelease) => void) => (
+  const _renderPressRelease = (item: PressRelease, onChange: (i: PressRelease) => void) => (
     <div className="grid gap-3">
       <Input
         placeholder="Title / Headline"
@@ -670,7 +660,7 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
     </div>
   );
 
-  const renderSocialMediaContent = (item: SocialMediaContent, onChange: (i: SocialMediaContent) => void) => (
+  const _renderSocialMediaContent = (item: SocialMediaContent, onChange: (i: SocialMediaContent) => void) => (
     <div className="grid gap-3">
       <div className="flex gap-2">
         <select
@@ -719,7 +709,7 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
     </div>
   );
 
-  const renderUserUpload = (item: UserUpload, onChange: (i: UserUpload) => void) => (
+  const _renderUserUpload = (item: UserUpload, onChange: (i: UserUpload) => void) => (
     <div className="grid gap-3">
       <div className="flex gap-2">
         <Input
@@ -1810,14 +1800,14 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
                         </div>
                         {/* Executive Accounts */}
                         <div className="space-y-2">
-                          <div className="flex items-center justify-between"><Label className="text-xs text-muted-foreground">Executive Accounts</Label><Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => updateOffSite({ executiveAccounts: [...(contextData.offSite.executiveAccounts || []), { id: uuidv4(), name: '', title: '', platform: 'LinkedIn', handle: '', xUrl: '', linkedinUrl: '' }] })}><Plus className="h-3 w-3" /></Button></div>
+                          <div className="flex items-center justify-between"><Label className="text-xs text-muted-foreground">Executive Accounts</Label><Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => updateOffSite({ executiveAccounts: [...(contextData.offSite.executiveAccounts || []), { id: uuidv4(), name: '', title: '', platform: 'LinkedIn', handle: '', xUrl: '', linkedinUrl: '' } as ExecutiveAccount] })}><Plus className="h-3 w-3" /></Button></div>
                           <div className="space-y-1">
                             {(contextData.offSite.executiveAccounts || []).length === 0 ? (
-                              <div className="text-xs text-muted-foreground text-center py-2 border border-dashed rounded-md cursor-pointer hover:bg-accent/50" onClick={() => updateOffSite({ executiveAccounts: [...(contextData.offSite.executiveAccounts || []), { id: uuidv4(), name: '', title: '', platform: 'LinkedIn', handle: '', xUrl: '', linkedinUrl: '' }] })}>
+                              <div className="text-xs text-muted-foreground text-center py-2 border border-dashed rounded-md cursor-pointer hover:bg-accent/50" onClick={() => updateOffSite({ executiveAccounts: [...(contextData.offSite.executiveAccounts || []), { id: uuidv4(), name: '', title: '', platform: 'LinkedIn', handle: '', xUrl: '', linkedinUrl: '' } as ExecutiveAccount] })}>
                                 Click + to add executives
                               </div>
                             ) : (
-                              (contextData.offSite.executiveAccounts || []).map((e: ExecutiveAccount) => (<div key={e.id} className="flex gap-1 group text-xs items-center"><Input className="h-8 text-xs w-16" placeholder="Name" value={e.name} onChange={(ev) => updateOffSite({ executiveAccounts: (contextData.offSite.executiveAccounts || []).map((x: ExecutiveAccount) => x.id === e.id ? { ...x, name: ev.target.value } : x) })} /><Input className="h-8 text-xs flex-1" placeholder="X URL" value={(e as any).xUrl || ''} onChange={(ev) => updateOffSite({ executiveAccounts: (contextData.offSite.executiveAccounts || []).map((x: ExecutiveAccount) => x.id === e.id ? { ...x, xUrl: ev.target.value } as any : x) })} /><Input className="h-8 text-xs flex-1" placeholder="LinkedIn URL" value={(e as any).linkedinUrl || e.handle || ''} onChange={(ev) => updateOffSite({ executiveAccounts: (contextData.offSite.executiveAccounts || []).map((x: ExecutiveAccount) => x.id === e.id ? { ...x, linkedinUrl: ev.target.value, handle: ev.target.value } as any : x) })} /><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={() => updateOffSite({ executiveAccounts: (contextData.offSite.executiveAccounts || []).filter((x: ExecutiveAccount) => x.id !== e.id) })}><X className="h-3 w-3" /></Button></div>))
+                              (contextData.offSite.executiveAccounts || []).map((e: ExecutiveAccount) => (<div key={e.id} className="flex gap-1 group text-xs items-center"><Input className="h-8 text-xs w-16" placeholder="Name" value={e.name} onChange={(ev) => updateOffSite({ executiveAccounts: (contextData.offSite.executiveAccounts || []).map((x: ExecutiveAccount) => x.id === e.id ? { ...x, name: ev.target.value } : x) })} /><Input className="h-8 text-xs flex-1" placeholder="X URL" value={e.xUrl || ''} onChange={(ev) => updateOffSite({ executiveAccounts: (contextData.offSite.executiveAccounts || []).map((x: ExecutiveAccount) => x.id === e.id ? { ...x, xUrl: ev.target.value } : x) })} /><Input className="h-8 text-xs flex-1" placeholder="LinkedIn URL" value={e.linkedinUrl || e.handle || ''} onChange={(ev) => updateOffSite({ executiveAccounts: (contextData.offSite.executiveAccounts || []).map((x: ExecutiveAccount) => x.id === e.id ? { ...x, linkedinUrl: ev.target.value, handle: ev.target.value } : x) })} /><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={() => updateOffSite({ executiveAccounts: (contextData.offSite.executiveAccounts || []).filter((x: ExecutiveAccount) => x.id !== e.id) })}><X className="h-3 w-3" /></Button></div>))
                             )}
                           </div>
                         </div>

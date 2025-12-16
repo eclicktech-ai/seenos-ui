@@ -306,6 +306,8 @@ export interface ExecutiveAccount {
   title: string;
   platform: string;
   handle: string;
+  xUrl?: string;
+  linkedinUrl?: string;
 }
 
 export interface PartnerAccount {
