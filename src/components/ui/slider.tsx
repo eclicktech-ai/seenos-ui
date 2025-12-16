@@ -26,8 +26,8 @@ const Slider = React.forwardRef<HTMLInputElement, SliderProps>(
       <div className={cn("relative flex w-full touch-none select-none items-center", className)}>
         <div className="relative h-2 w-full grow overflow-hidden rounded-full bg-secondary">
           <div
-            className="absolute h-full transition-all"
-            style={{ width: `${progress}%`, backgroundColor: 'hsl(173, 58%, 35%)' }}
+            className="absolute h-full bg-foreground transition-all"
+            style={{ width: `${progress}%` }}
           />
         </div>
         <input

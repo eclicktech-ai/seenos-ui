@@ -73,27 +73,27 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-8">
+    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-6">
       <div className="w-full max-w-md">
         {/* Logo & Title */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center mb-4">
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center mb-3">
             <Image
               src="/logo.svg"
               alt="SeenOS Logo"
-              width={80}
-              height={80}
+              width={64}
+              height={64}
               priority
               className="drop-shadow-lg"
             />
           </div>
-          <h1 className="text-2xl font-bold text-foreground">SeenOS</h1>
-          <p className="text-muted-foreground mt-2">Create your account</p>
+          <h1 className="text-xl font-bold text-foreground">SeenOS</h1>
+          <p className="text-muted-foreground mt-1 text-sm">Create your account</p>
         </div>
 
         {/* Register Form */}
-        <div className="bg-card rounded-2xl shadow-xl border border-border p-8">
-          <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="bg-card rounded-2xl shadow-xl border border-border p-6">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {/* Error Message */}
             {error && (
               <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20">
@@ -118,7 +118,7 @@ export default function RegisterPage() {
 
             {/* Name Field (Optional) */}
             <div>
-              <label htmlFor="name" className="block text-sm font-medium text-foreground mb-2">
+              <label htmlFor="name" className="block text-sm font-medium text-foreground mb-1.5">
                 Name <span className="text-muted-foreground">(optional)</span>
               </label>
               <input
@@ -127,14 +127,14 @@ export default function RegisterPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 autoComplete="name"
-                className="w-full px-4 py-3 rounded-lg border border-border bg-background focus:ring-2 focus:ring-primary focus:border-primary transition-colors text-foreground placeholder-muted-foreground"
+                className="w-full px-3 py-2.5 rounded-lg border border-border bg-background focus:ring-2 focus:ring-primary focus:border-primary transition-colors text-foreground placeholder-muted-foreground text-sm"
                 placeholder="Your name"
               />
             </div>
 
             {/* Email Field */}
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-foreground mb-2">
+              <label htmlFor="email" className="block text-sm font-medium text-foreground mb-1.5">
                 Email Address <span className="text-destructive">*</span>
               </label>
               <input
@@ -144,14 +144,14 @@ export default function RegisterPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 autoComplete="email"
-                className="w-full px-4 py-3 rounded-lg border border-border bg-background focus:ring-2 focus:ring-primary focus:border-primary transition-colors text-foreground placeholder-muted-foreground"
+                className="w-full px-3 py-2.5 rounded-lg border border-border bg-background focus:ring-2 focus:ring-primary focus:border-primary transition-colors text-foreground placeholder-muted-foreground text-sm"
                 placeholder="you@example.com"
               />
             </div>
 
             {/* Password Field */}
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-foreground mb-2">
+              <label htmlFor="password" className="block text-sm font-medium text-foreground mb-1.5">
                 Password <span className="text-destructive">*</span>
               </label>
               <input
@@ -161,7 +161,7 @@ export default function RegisterPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 autoComplete="new-password"
-                className="w-full px-4 py-3 rounded-lg border border-border bg-background focus:ring-2 focus:ring-primary focus:border-primary transition-colors text-foreground placeholder-muted-foreground"
+                className="w-full px-3 py-2.5 rounded-lg border border-border bg-background focus:ring-2 focus:ring-primary focus:border-primary transition-colors text-foreground placeholder-muted-foreground text-sm"
                 placeholder="••••••••"
               />
               <p className="mt-1 text-xs text-muted-foreground">
@@ -171,7 +171,7 @@ export default function RegisterPage() {
 
             {/* Confirm Password Field */}
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-foreground mb-2">
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-foreground mb-1.5">
                 Confirm Password <span className="text-destructive">*</span>
               </label>
               <input
@@ -181,14 +181,14 @@ export default function RegisterPage() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
                 autoComplete="new-password"
-                className="w-full px-4 py-3 rounded-lg border border-border bg-background focus:ring-2 focus:ring-primary focus:border-primary transition-colors text-foreground placeholder-muted-foreground"
+                className="w-full px-3 py-2.5 rounded-lg border border-border bg-background focus:ring-2 focus:ring-primary focus:border-primary transition-colors text-foreground placeholder-muted-foreground text-sm"
                 placeholder="••••••••"
               />
             </div>
 
             {/* Invite Code Field */}
             <div>
-              <label htmlFor="inviteCode" className="block text-sm font-medium text-foreground mb-2">
+              <label htmlFor="inviteCode" className="block text-sm font-medium text-foreground mb-1.5">
                 Invite Code <span className="text-destructive">*</span>
               </label>
               <input
@@ -197,7 +197,7 @@ export default function RegisterPage() {
                 value={inviteCode}
                 onChange={(e) => setInviteCode(e.target.value)}
                 required
-                className="w-full px-4 py-3 rounded-lg border border-border bg-background focus:ring-2 focus:ring-primary focus:border-primary transition-colors text-foreground placeholder-muted-foreground"
+                className="w-full px-3 py-2.5 rounded-lg border border-border bg-background focus:ring-2 focus:ring-primary focus:border-primary transition-colors text-foreground placeholder-muted-foreground text-sm"
                 placeholder="Enter your invite code"
               />
               <p className="mt-1 text-xs text-muted-foreground">
@@ -209,8 +209,7 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={isLoading || !email || !password || !confirmPassword || !inviteCode}
-              style={{ backgroundColor: 'hsl(173, 58%, 35%)' }}
-              className="w-full py-3 px-4 rounded-lg text-white font-medium hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full py-2.5 px-4 rounded-lg bg-foreground text-background font-medium hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
             >
               {isLoading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -242,7 +241,7 @@ export default function RegisterPage() {
           </form>
 
           {/* Terms */}
-          <p className="mt-6 text-center text-xs text-muted-foreground">
+          <p className="mt-4 text-center text-xs text-muted-foreground">
             By creating an account, you agree to our{" "}
             <a href="#" className="text-primary hover:text-primary/80">
               Terms of Service
@@ -255,7 +254,7 @@ export default function RegisterPage() {
         </div>
 
         {/* Sign In Link */}
-        <p className="text-center mt-6 text-muted-foreground">
+        <p className="text-center mt-4 text-muted-foreground text-sm">
           Already have an account?{" "}
           <Link href="/login" className="text-primary hover:text-primary/80 font-medium">
             Sign in

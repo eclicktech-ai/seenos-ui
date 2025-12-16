@@ -65,7 +65,6 @@ interface DiffLine {
 function computeLineDiff(oldContent: string, newContent: string): DiffLine[] {
   const oldLines = oldContent.split("\n");
   const newLines = newContent.split("\n");
-  const result: DiffLine[] = [];
 
   // 使用简单的 LCS 算法
   const m = oldLines.length;

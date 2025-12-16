@@ -10,7 +10,7 @@ const getApiBaseUrl = (): string => {
   if (process.env.NEXT_PUBLIC_API_URL) {
     return process.env.NEXT_PUBLIC_API_URL;
   }
-  return 'http://localhost:8000/api';
+  return 'https://seenos.seokit.tech/api';
 };
 
 const API_BASE_URL = getApiBaseUrl();

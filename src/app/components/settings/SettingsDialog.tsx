@@ -224,11 +224,10 @@ function SettingsContent({ onOpenChange }: { onOpenChange: (open: boolean) => vo
                 )}
               >
                 <span
-                  style={activeTab === tab.id ? { backgroundColor: 'hsl(173, 58%, 35%)' } : undefined}
                   className={cn(
                     "flex h-7 w-7 items-center justify-center rounded-md",
-                    activeTab === tab.id
-                      ? "text-white"
+                    activeTab === tab.id 
+                      ? "bg-foreground text-background" 
                       : "bg-muted text-muted-foreground"
                   )}
                 >

@@ -1,9 +1,13 @@
 "use client";
 
 import React, { useState, useCallback, useMemo } from "react";
-import { FileText, BookOpen, Wrench, Settings2, Activity, Search, FileEdit, Eye } from "lucide-react";
+import { FileText, BookOpen, Wrench, Settings2, Activity, Layers, FolderDown } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import type { FileItem } from "@/app/types/types";
 import { FileViewDialog } from "@/app/components/FileViewDialog";
+import { PlaybookDialog } from "@/app/components/PlaybookDialog";
+import { type Playbook, type PlaybookCategory } from "@/data/playbooks";
+import { useChatContext } from "@/providers/ChatProvider";
 
 interface RightSidebarProps {
   files: Record<string, string> | Record<string, FileItem>;
@@ -12,26 +16,48 @@ interface RightSidebarProps {
   interrupt: unknown;
 }
 
-type PlaybookType = "Research" | "Build" | "Optimize" | "Monitor";
+interface PlaybookButton {
+  id: string;
+  label: string;
+  icon: React.ReactNode;
+  description: string;
+}
 
-const PlaybookIcon = ({ type }: { type: PlaybookType }) => {
-  switch (type) {
-    case "Research":
-      return <BookOpen size={20} className="text-muted-foreground" />;
-    case "Build":
-      return <Wrench size={20} className="text-muted-foreground" />;
-    case "Optimize":
-      return <Settings2 size={20} className="text-muted-foreground" />;
-    case "Monitor":
-      return <Activity size={20} className="text-muted-foreground" />;
-  }
-};
+const playbooks: PlaybookButton[] = [
+  {
+    id: "research",
+    label: "Research",
+    icon: <BookOpen size={24} />,
+    description: "Deep research task",
+  },
+  {
+    id: "build",
+    label: "Build",
+    icon: <Wrench size={24} />,
+    description: "Build and create",
+  },
+  {
+    id: "optimize",
+    label: "Optimize",
+    icon: <Settings2 size={24} />,
+    description: "Optimize and improve",
+  },
+  {
+    id: "monitor",
+    label: "Monitor",
+    icon: <Activity size={24} />,
+    description: "Monitor and track",
+  },
+];
 
 export const RightSidebar = React.memo<RightSidebarProps>(
   ({ files, setFiles, isLoading, interrupt }) => {
     const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
-    const [searchQuery, setSearchQuery] = useState("");
-    const fileCount = Object.keys(files).length;
+    const [dialogOpen, setDialogOpen] = useState(false);
+    const [selectedCategory, setSelectedCategory] = useState<PlaybookCategory | null>(null);
+    
+    // Get sendMessage from context
+    const { sendMessage } = useChatContext();
 
     const handleSaveFile = useCallback(
       async (fileName: string, content: string) => {
@@ -46,179 +72,159 @@ export const RightSidebar = React.memo<RightSidebarProps>(
       [files, setFiles]
     );
 
-    // Filter files based on search query
-    const filteredFiles = useMemo(() => {
-      if (!searchQuery.trim()) return Object.keys(files);
-      const query = searchQuery.toLowerCase();
-      return Object.keys(files).filter((file) =>
-        file.toLowerCase().includes(query)
-      );
-    }, [files, searchQuery]);
+    const handlePlaybookClick = (playbookId: string) => {
+      setSelectedCategory(playbookId as PlaybookCategory);
+      setDialogOpen(true);
+    };
 
-    const playbooks: PlaybookType[] = ["Research", "Build", "Optimize", "Monitor"];
+    const handleRunPlaybook = (playbook: Playbook, customInstructions?: string) => {
+      const prompt = `Run the "${playbook.title}" agent (${playbook.agentName}).
+        
+Category: ${playbook.category}
+Task: ${playbook.description}
+
+Auto Actions:
+${playbook.autoActions.map(a => `- ${a}`).join('\n')}
+
+Expected Outputs:
+${playbook.outputs.map(o => `- ${o}`).join('\n')}
+
+${customInstructions ? `Custom Instructions:\n${customInstructions}` : ''}`;
+      
+      sendMessage(prompt);
+    };
+
+    // Filter out internal large_tool_results files
+    const visibleFiles = useMemo(() => {
+      return Object.keys(files).filter(
+        (f) => !f.startsWith("/large_tool_results/")
+      );
+    }, [files]);
+
+    const getFileContent = useCallback((filePath: string): string => {
+      const rawContent = files[filePath];
+      if (typeof rawContent === "object" && rawContent !== null && "content" in rawContent) {
+        const contentArray = (rawContent as { content: unknown }).content;
+        return Array.isArray(contentArray) ? contentArray.join("\n") : String(contentArray || "");
+      }
+      return String(rawContent || "");
+    }, [files]);
+
+    const handleDownloadAll = useCallback(() => {
+      if (visibleFiles.length === 0) return;
+
+      visibleFiles.forEach((filePath) => {
+        const fileContent = getFileContent(filePath);
+        const fileName = filePath.split("/").pop() || filePath;
+        
+        // Create a blob and download
+        const blob = new Blob([fileContent], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      });
+    }, [visibleFiles, getFileContent]);
 
     return (
-      <div className="flex h-full flex-col bg-card">
-        {/* Playbooks Section */}
-        <div className="flex-shrink-0 border-b border-border p-4 pb-5">
-          <div className="mb-4 flex items-center gap-2">
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="text-muted-foreground"
-            >
-              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-            </svg>
-            <span className="text-sm font-medium text-foreground">Playbooks</span>
-          </div>
-
-          {/* Playbooks Grid */}
-          <div className="grid grid-cols-2 gap-2.5">
-            {playbooks.map((playbook) => (
-              <button
-                key={playbook}
-                className="flex flex-col items-center justify-center rounded-lg border border-border bg-card px-3 py-4 transition-colors hover:bg-accent"
-              >
-                <PlaybookIcon type={playbook} />
-                <span className="mt-2 text-xs font-medium text-muted-foreground">
-                  {playbook}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Artefacts Section */}
-        <div className="flex min-h-0 flex-1 flex-col p-4">
-          <div className="mb-3 flex flex-shrink-0 items-center justify-between">
-            <div className="flex items-center gap-2">
-              <FileText size={16} className="text-muted-foreground" />
-              <span className="text-sm font-medium text-foreground">Artefacts</span>
-            </div>
-            {fileCount > 0 && (
-              <span 
-                style={{ backgroundColor: 'hsl(173, 58%, 35%)' }}
-                className="flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-medium text-white"
-              >
-                {fileCount}
+      <div className="flex h-full flex-col p-2 pl-0">
+        <div className="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-background">
+          {/* Playbooks Module - Top Section (fixed height) */}
+          <div className="group/playbooks flex-shrink-0">
+            <div className="flex h-12 items-center gap-2 px-4 border-b border-border bg-muted/30">
+              <Layers size={16} className="text-muted-foreground" />
+              <span className="text-sm font-semibold tracking-wide">
+                Playbooks
               </span>
-            )}
+            </div>
+            <div className="px-4 py-4">
+              <div className="grid grid-cols-2 gap-2">
+                {playbooks.map((playbook) => (
+                  <button
+                    key={playbook.id}
+                    onClick={() => handlePlaybookClick(playbook.id)}
+                    className="flex flex-col items-center justify-center gap-2 rounded-lg border border-border bg-card p-4 transition-all hover:border-primary/50 hover:bg-accent"
+                  >
+                    <div className="text-muted-foreground">{playbook.icon}</div>
+                    <span className="text-sm font-medium">{playbook.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
-          {/* Search Input */}
-          {fileCount > 0 && (
-            <div className="relative mb-3 flex-shrink-0">
-              <Search
-                size={14}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-              />
-              <input
-                type="text"
-                placeholder="Search files..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-lg border border-border bg-background py-2 pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-            </div>
-          )}
-
-          {/* Files List - Scrollable */}
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {fileCount === 0 ? (
-              <p className="py-4 text-center text-xs text-muted-foreground">
-                No artefacts created yet
-              </p>
-            ) : filteredFiles.length === 0 ? (
-              <p className="py-4 text-center text-xs text-muted-foreground">
-                No files matching "{searchQuery}"
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {filteredFiles.map((file) => {
-                  const filePath = String(file);
-                  const rawContent = files[file];
-                  let fileItem: FileItem;
-                  
-                  if (
-                    typeof rawContent === "object" &&
-                    rawContent !== null &&
-                    "content" in rawContent
-                  ) {
-                    const rawFileItem = rawContent as FileItem;
-                    const contentArray = rawFileItem.content;
-                    const content = Array.isArray(contentArray)
-                      ? contentArray.join("\n")
-                      : String(contentArray || "");
-                    
-                    fileItem = {
-                      path: filePath,
-                      content,
-                      language: rawFileItem.language,
-                      editable: rawFileItem.editable,
-                      lastModified: rawFileItem.lastModified,
-                      oldContent: rawFileItem.oldContent,
-                      lineStart: rawFileItem.lineStart,
-                      lineEnd: rawFileItem.lineEnd,
-                    };
-                  } else {
-                    fileItem = {
-                      path: filePath,
-                      content: String(rawContent || ""),
-                    };
-                  }
-
-                  const hasChanges = !!fileItem.oldContent;
-                  const isEditable = fileItem.editable !== false;
-
-                  return (
-                    <button
-                      key={filePath}
-                      type="button"
-                      onClick={() => setSelectedFile(fileItem)}
-                      className="group flex w-full items-start gap-3 rounded-lg border border-border bg-card p-3 text-left transition-colors hover:bg-accent"
-                    >
-                      {hasChanges ? (
-                        <FileEdit size={16} className="mt-0.5 flex-shrink-0 text-primary" />
-                      ) : (
-                        <FileText size={16} className="mt-0.5 flex-shrink-0 text-muted-foreground" />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <p className="truncate text-sm font-medium text-foreground">
-                            {filePath.split("/").pop()}
-                          </p>
-                          {hasChanges && (
-                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                              Modified
-                            </span>
-                          )}
-                          {!isEditable && (
-                            <span title="Read only">
-                              <Eye size={12} className="text-muted-foreground" />
-                            </span>
-                          )}
-                        </div>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {filePath.startsWith('/') ? filePath : `/${filePath}`}
-                        </p>
-                        {fileItem.lastModified && (
-                          <p className="mt-1 text-[10px] text-muted-foreground/70">
-                            {new Date(fileItem.lastModified).toLocaleTimeString()}
-                          </p>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
+          {/* Artifacts Module - Bottom Section (fills remaining space) */}
+          <div className="group/artifacts flex min-h-0 flex-1 flex-col">
+            <div className="flex h-12 flex-shrink-0 items-center justify-between gap-2 px-4 border-b border-border bg-muted/30">
+              <div className="flex items-center gap-2">
+                <FileText size={16} className="text-muted-foreground" />
+                <span className="text-sm font-semibold tracking-wide">
+                  Artifacts
+                </span>
+                {visibleFiles.length > 0 && (
+                  <span className="rounded-full bg-foreground px-2 py-0.5 text-xs font-medium text-background">
+                    {visibleFiles.length}
+                  </span>
+                )}
               </div>
-            )}
+              <button
+                type="button"
+                onClick={handleDownloadAll}
+                className="opacity-0 group-hover/artifacts:opacity-100 transition-opacity p-1.5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground"
+                title="Download All"
+              >
+                <FolderDown size={16} />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-hidden">
+              {visibleFiles.length === 0 ? (
+                <div className="flex h-full items-center justify-center px-4 pb-4">
+                  <p className="text-xs text-muted-foreground">
+                    No artifacts created yet
+                  </p>
+                </div>
+              ) : (
+                <ScrollArea className="h-full px-4 py-4">
+                  <div className="space-y-1">
+                    {visibleFiles.map((filePath) => {
+                      const fileContent = getFileContent(filePath);
+                      const fileName = filePath.split("/").pop() || filePath;
+
+                      const fileItem: FileItem = {
+                        path: filePath,
+                        content: fileContent,
+                      };
+
+                      return (
+                        <div
+                          key={filePath}
+                          className="group relative flex w-full items-center gap-3 rounded-md border border-transparent px-3 py-2 text-left transition-colors hover:border-border hover:bg-accent"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setSelectedFile(fileItem)}
+                            className="flex flex-1 items-center gap-3 min-w-0"
+                          >
+                            <FileText
+                              size={16}
+                              className="flex-shrink-0 text-muted-foreground"
+                            />
+                            <p className="min-w-0 flex-1 truncate text-sm font-medium text-left">
+                              {fileName}
+                            </p>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+              )}
+            </div>
           </div>
         </div>
 
@@ -230,6 +236,13 @@ export const RightSidebar = React.memo<RightSidebarProps>(
             editDisabled={isLoading === true || interrupt !== undefined}
           />
         )}
+
+        <PlaybookDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          category={selectedCategory}
+          onRunPlaybook={handleRunPlaybook}
+        />
       </div>
     );
   }

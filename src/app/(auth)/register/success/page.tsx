@@ -67,8 +67,7 @@ export default function RegisterSuccessPage() {
           {/* Sign In Button */}
           <Link
             href="/login"
-            style={{ backgroundColor: 'hsl(173, 58%, 35%)' }}
-            className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-lg text-white font-medium hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-all group"
+            className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 rounded-lg bg-foreground text-background font-medium hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-all group"
           >
             Go to Sign In
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />

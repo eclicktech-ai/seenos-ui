@@ -1,41 +1,66 @@
 "use client";
 
-import React, { useMemo, useRef, useCallback, useState } from "react";
-import { Plus, CheckCircle, Circle, Clock, XCircle, FileText, File, Loader2, Trash2, AlertCircle, CheckCircle2, Eye } from "lucide-react";
-import { cn } from "@/lib/utils";
+import React, { useState, useMemo } from "react";
+import {
+  CheckCircle,
+  Circle,
+  Database,
+  ListTodo,
+  Loader2,
+  Plus,
+  Globe,
+  Share2,
+  BookOpen,
+  ChevronRight,
+  ChevronDown,
+  FileText,
+  Link as LinkIcon,
+  Users,
+  Megaphone,
+  Briefcase,
+  TrendingUp,
+  File,
+  User,
+  Layout,
+  Palette,
+  Network, // For On-site (Structure)
+  ShoppingBag,
+  MessageSquare,
+  Newspaper,
+  Target,
+  Paintbrush,
+  Book,
+  Flag,
+  AlertCircle,
+  Zap,
+  Building,
+  Star,
+  Info,
+  HelpCircle,
+  MapPin,
+  Mail,
+  Phone,
+  LayoutList,
+  Type,
+  Folder,
+  Upload,
+  Cloud,
+  Save,
+} from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
 import type { TodoItem } from "@/app/types/types";
-import { useContextFiles } from "@/providers/ContextProvider";
-import { toast } from "sonner";
-import { ContextFilePreview } from "./ContextFilePreview";
-import type { ContextFile } from "@/lib/api/client";
-
-// 文件类型图标映射
-const FILE_TYPE_ICONS: Record<string, React.ReactNode> = {
-  txt: <FileText className="h-3.5 w-3.5 text-gray-500" />,
-  md: <FileText className="h-3.5 w-3.5 text-blue-500" />,
-  pdf: <File className="h-3.5 w-3.5 text-red-500" />,
-  docx: <File className="h-3.5 w-3.5 text-blue-600" />,
-};
-
-// 状态图标映射
-const FILE_STATUS_ICONS: Record<string, React.ReactNode> = {
-  pending: <Clock className="h-3 w-3 text-yellow-500" />,
-  processing: <Loader2 className="h-3 w-3 animate-spin text-blue-500" />,
-  ready: <CheckCircle2 className="h-3 w-3 text-green-500" />,
-  error: <AlertCircle className="h-3 w-3 text-red-500" />,
-};
-
-// 格式化文件大小
-function formatFileSize(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
-}
+import { cn } from "@/lib/utils";
+import { useContextMenu } from "@/providers/ContextProvider";
+import { ContextWizard } from "@/app/components/ContextWizard";
 
 interface LeftSidebarProps {
   todos: TodoItem[];
+  onAddContext?: () => void;
 }
 
 const getStatusIcon = (status: TodoItem["status"], className?: string) => {
@@ -44,364 +69,477 @@ const getStatusIcon = (status: TodoItem["status"], className?: string) => {
       return (
         <CheckCircle
           size={14}
-          className={cn("text-green-500 dark:text-green-400", className)}
+          className={cn("flex-shrink-0 text-emerald-500", className)}
         />
       );
     case "in_progress":
       return (
-        <Clock
+        <Loader2
           size={14}
-          className={cn("text-amber-500 dark:text-amber-400", className)}
-        />
-      );
-    case "failed":
-      return (
-        <XCircle
-          size={14}
-          className={cn("text-red-500 dark:text-red-400", className)}
+          className={cn("flex-shrink-0 text-amber-500 animate-spin", className)}
         />
       );
     default:
       return (
         <Circle
           size={14}
-          className={cn("text-muted-foreground", className)}
+          className={cn("flex-shrink-0 text-muted-foreground/50", className)}
         />
       );
   }
 };
 
-export const LeftSidebar = React.memo<LeftSidebarProps>(({ todos }) => {
-  const {
-    files,
-    isLoading: isLoadingFiles,
-    isUploading,
-    uploadFile,
-    deleteFile,
-    readyFilesCount,
-  } = useContextFiles();
+// Tree Item Component
+const TreeItem = ({
+  label,
+  count,
+  icon: Icon,
+  children,
+  level = 0,
+  defaultExpanded = false,
+  onClick
+}: {
+  label: string,
+  count?: number,
+  icon: any,
+  children?: React.ReactNode,
+  level?: number,
+  defaultExpanded?: boolean,
+  onClick?: () => void
+}) => {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const hasChildren = !!children;
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [previewFile, setPreviewFile] = useState<ContextFile | null>(null);
-  const [previewOpen, setPreviewOpen] = useState(false);
-
-  const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = event.target.files;
-    if (!selectedFiles || selectedFiles.length === 0) return;
-
-    const file = selectedFiles[0];
-    const result = await uploadFile(file);
-    
-    if (result) {
-      toast.success("File uploaded successfully");
-    } else {
-      toast.error("Failed to upload file");
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Stop propagation to prevent opening context wizard when toggling
+    if (hasChildren) {
+      setExpanded(!expanded);
     }
+  };
 
-    // 重置 input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Stop propagation
+    if (onClick) {
+      onClick();
+    } else if (hasChildren) {
+      // If no specific click action, toggle expand
+      setExpanded(!expanded);
     }
-  }, [uploadFile]);
-
-  const handleDelete = useCallback(async (contextId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setDeletingId(contextId);
-    const success = await deleteFile(contextId);
-    if (success) {
-      toast.success("File deleted");
-    } else {
-      toast.error("Failed to delete file");
-    }
-    setDeletingId(null);
-  }, [deleteFile]);
-
-  const handleFileClick = useCallback((file: ContextFile) => {
-    if (file.status === "ready") {
-      setPreviewFile(file);
-      setPreviewOpen(true);
-    }
-  }, []);
-
-  const groupedTodos = useMemo(() => {
-    return {
-      in_progress: todos.filter((t) => t.status === "in_progress"),
-      pending: todos.filter((t) => t.status === "pending"),
-      completed: todos.filter((t) => t.status === "completed"),
-      failed: todos.filter((t) => t.status === "failed"),
-    };
-  }, [todos]);
-
-  const activeCount = groupedTodos.in_progress.length + groupedTodos.pending.length;
+  };
 
   return (
-    <>
-    <div className="flex h-full flex-col bg-card">
-      {/* Context Section - Takes up ~50% of height */}
-      <div className="flex h-1/2 flex-shrink-0 flex-col border-b border-border p-4">
-        <div className="mb-2 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="text-muted-foreground"
+    <div className="select-none">
+      <div
+        className={cn(
+          "flex items-center justify-between p-1.5 rounded-md hover:bg-accent/50 cursor-pointer transition-colors group text-sm",
+          level > 0 && "ml-3"
+        )}
+        onClick={handleClick}
+      >
+        <div className="flex items-center gap-2 overflow-hidden">
+          {hasChildren ? (
+            <div
+              role="button"
+              className="text-muted-foreground/50 group-hover:text-muted-foreground p-0.5 hover:bg-accent rounded"
+              onClick={handleToggle}
             >
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-              <line x1="3" y1="9" x2="21" y2="9" />
-              <line x1="9" y1="21" x2="9" y2="9" />
-            </svg>
-            <span className="text-sm font-medium text-foreground">Context</span>
-          </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".txt,.md,.pdf,.docx"
-            onChange={handleFileUpload}
-            className="hidden"
-          />
-          <button 
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isUploading}
-            className="rounded p-1 hover:bg-accent disabled:opacity-50"
-            title="Upload file"
-          >
-            {isUploading ? (
-              <Loader2 size={16} className="animate-spin text-muted-foreground" />
-            ) : (
-              <Plus size={16} className="text-muted-foreground" />
-            )}
-          </button>
-        </div>
-        
-        {/* Context Files List */}
-        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-          {isLoadingFiles ? (
-            <div className="flex h-full items-center justify-center">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : files.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center">
-              <p className="text-center text-xs text-muted-foreground">
-                No documents yet
-              </p>
-              <p className="mt-1 text-center text-[10px] text-muted-foreground/70">
-                Click + to upload
-              </p>
+              {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             </div>
           ) : (
-            <div className="space-y-1.5">
-              {files.map((file) => (
-                <div
-                  key={file.id}
-                  onClick={() => handleFileClick(file)}
-                  className={cn(
-                    "group flex items-center gap-2 rounded-md p-1.5 hover:bg-muted/50",
-                    file.status === "ready" && "cursor-pointer"
-                  )}
-                >
-                  <div className="flex-shrink-0">
-                    {FILE_TYPE_ICONS[file.fileType] || <File className="h-3.5 w-3.5 text-gray-500" />}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-medium text-foreground">
-                      {file.filename}
-                    </p>
-                    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                      <span>{formatFileSize(file.fileSize)}</span>
-                      <span>•</span>
-                      {FILE_STATUS_ICONS[file.status]}
-                    </div>
-                  </div>
-                  <div className="flex flex-shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                    {file.status === "ready" && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleFileClick(file);
-                        }}
-                        className="rounded p-0.5 hover:bg-accent"
-                        title="View content"
-                      >
-                        <Eye className="h-3 w-3 text-muted-foreground hover:text-foreground" />
-                      </button>
-                    )}
-                    <button
-                      onClick={(e) => handleDelete(file.id, e)}
-                      disabled={deletingId === file.id}
-                      className="rounded p-0.5 hover:bg-destructive/10"
-                      title="Delete file"
-                    >
-                      {deletingId === file.id ? (
-                        <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
-                      ) : (
-                        <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-              ))}
-              {readyFilesCount > 0 && (
-                <p className="pt-1 text-center text-[10px] text-muted-foreground">
-                  {readyFilesCount} file{readyFilesCount !== 1 ? 's' : ''} ready
-                </p>
-              )}
-            </div>
+            <div className="w-[18px]" /> // Spacer
           )}
+
+          <Icon size={14} className={cn(
+            level === 0 ? "text-primary" : "text-muted-foreground"
+          )} />
+          <span className={cn(
+            "truncate",
+            level === 0 ? "font-medium" : "text-muted-foreground group-hover:text-foreground"
+          )}>
+            {label}
+          </span>
         </div>
+
+        {count !== undefined && (
+          <span className="text-xs text-muted-foreground/60 tabular-nums px-1">
+            {count}
+          </span>
+        )}
       </div>
 
-      {/* Tasks Section - Takes up all remaining space */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
-        <div className="mb-2 flex flex-shrink-0 items-center justify-between">
-          <div className="flex items-center gap-2">
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="text-muted-foreground"
-            >
-              <path d="M9 11l3 3L22 4" />
-              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-            </svg>
-            <span className="text-sm font-medium text-foreground">Tasks</span>
-          </div>
-          <span className="text-xs text-muted-foreground">{activeCount} active</span>
+      {hasChildren && expanded && (
+        <div className="border-l border-border/50 ml-[11px]">
+          {children}
         </div>
-
-        {/* Tasks List - Scrollable, no horizontal scroll */}
-        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-          {todos.length === 0 ? (
-            <p className="py-2 text-center text-xs text-muted-foreground">No tasks yet</p>
-          ) : (
-            <div className="space-y-2 pr-1">
-              {/* In Progress */}
-              {groupedTodos.in_progress.length > 0 && (
-                <div className="overflow-hidden">
-                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    IN PROGRESS
-                  </div>
-                  <div className="space-y-1">
-                    {groupedTodos.in_progress.map((todo, index) => (
-                      <div
-                        key={`in_progress_${todo.id}_${index}`}
-                        className="flex min-w-0 items-start gap-2"
-                      >
-                        <div className="mt-0.5 flex-shrink-0">
-                          {getStatusIcon(todo.status)}
-                        </div>
-                        <span className="min-w-0 break-words text-xs leading-relaxed text-foreground [overflow-wrap:anywhere]">
-                          {todo.content}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Pending */}
-              {groupedTodos.pending.length > 0 && (
-                <div className="overflow-hidden">
-                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    PENDING
-                  </div>
-                  <div className="space-y-1">
-                    {groupedTodos.pending.map((todo, index) => (
-                      <div
-                        key={`pending_${todo.id}_${index}`}
-                        className="flex min-w-0 items-start gap-2"
-                      >
-                        <div className="mt-0.5 flex-shrink-0">
-                          {getStatusIcon(todo.status)}
-                        </div>
-                        <span className="min-w-0 break-words text-xs leading-relaxed text-foreground [overflow-wrap:anywhere]">
-                          {todo.content}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Failed */}
-              {groupedTodos.failed.length > 0 && (
-                <div className="overflow-hidden">
-                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-red-500 dark:text-red-400">
-                    FAILED
-                  </div>
-                  <div className="space-y-1">
-                    {groupedTodos.failed.map((todo, index) => (
-                      <div
-                        key={`failed_${todo.id}_${index}`}
-                        className="flex min-w-0 items-start gap-2"
-                      >
-                        <div className="mt-0.5 flex-shrink-0">
-                          {getStatusIcon(todo.status)}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <span className="break-words text-xs leading-relaxed text-red-600 dark:text-red-400 [overflow-wrap:anywhere]">
-                            {todo.content}
-                          </span>
-                          {todo.error && (
-                            <p className="mt-0.5 text-[10px] text-red-500/80 dark:text-red-400/80">
-                              {todo.error}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Completed */}
-              {groupedTodos.completed.length > 0 && (
-                <div className="overflow-hidden">
-                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    COMPLETED
-                  </div>
-                  <div className="space-y-1">
-                    {groupedTodos.completed.map((todo, index) => (
-                      <div
-                        key={`completed_${todo.id}_${index}`}
-                        className="flex min-w-0 items-start gap-2"
-                      >
-                        <div className="mt-0.5 flex-shrink-0">
-                          {getStatusIcon(todo.status)}
-                        </div>
-                        <span className="min-w-0 break-words text-xs leading-relaxed text-muted-foreground line-through [overflow-wrap:anywhere]">
-                          {todo.content}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+      )}
     </div>
+  );
+};
 
-    {/* File Preview Dialog */}
-    <ContextFilePreview
-      file={previewFile}
-      open={previewOpen}
-      onOpenChange={setPreviewOpen}
-    />
+export const LeftSidebar = React.memo<LeftSidebarProps>(
+  ({ todos, onAddContext }) => {
+    const { contextData, isContextEmpty, wizardOpen, setWizardOpen } = useContextMenu();
+    const [defaultWizardTab, setDefaultWizardTab] = useState<"onSite" | "offSite" | "knowledge">("onSite");
+    
+    // Type assertion for compatibility
+    const brandInfo = contextData.onSite.brandInfo as any;
+
+    const openWizard = (tab: "onSite" | "offSite" | "knowledge") => {
+      setDefaultWizardTab(tab);
+      setWizardOpen(true);
+    };
+
+    // Calculate Counts
+    const onSiteCounts = {
+      // Brand Breakdown
+      brandMeta: (brandInfo?.name ? 1 : 0) + (contextData.onSite.websiteContent?.filter((c: any) => c.url === "#meta-subtitle").length || 0),
+      brandLogo: (contextData.onSite.websiteContent?.filter((c: any) => c.url?.startsWith("#brand-logo")).length || 0),
+      brandColors: (contextData.onSite.websiteContent?.filter((c: any) => c.url?.startsWith("#brand-color")).length || 0),
+      brandFonts: (contextData.onSite.websiteContent?.filter((c: any) => c.url?.startsWith("#brand-font")).length || 0),
+      brandTone: (contextData.onSite.websiteContent?.filter((c: any) => c.url === "#brand-tone").length || 0),
+      brandLangs: (contextData.onSite.websiteContent?.filter((c: any) => c.url === "#brand-languages").length || 0),
+      get brand() { return this.brandMeta + this.brandLogo + this.brandColors + this.brandFonts + this.brandTone + this.brandLangs; },
+
+      // Pages Breakdown
+      pagesCore: contextData.onSite.websiteContent?.filter((c: any) => ["home", "about", "career", "legal"].includes(c.type) || c.url === "#page-contact").length || 0,
+      pagesProduct: contextData.onSite.websiteContent?.filter((c: any) => c.type === "pricing" || ["#page-products", "#page-features", "#page-solutions"].includes(c.url)).length || 0,
+      pagesResources: contextData.onSite.websiteContent?.filter((c: any) => ["documentation", "faq", "case_study"].includes(c.type) || c.url === "#page-blog").length || 0,
+      pagesLegal: contextData.onSite.websiteContent?.filter((c: any) => c.type === "legal" || ["#page-privacy", "#page-changelog", "#page-status"].includes(c.url)).length || 0,
+      get pages() { return this.pagesCore + this.pagesProduct + this.pagesResources + this.pagesLegal; },
+
+      landing: contextData.onSite.landingPages?.length || 0,
+      blog: contextData.onSite.blogPosts?.length || 0,
+
+      // Hero Breakdown
+      heroHeadline: (brandInfo?.uniqueSellingPoints?.[0] ? 1 : 0),
+      heroSubheadline: (brandInfo?.tagline ? 1 : 0),
+      heroCTA: (contextData.onSite.websiteContent?.filter((c: any) => c.url === "#cta").length || 0),
+      heroMedia: (contextData.onSite.websiteContent?.filter((c: any) => c.url === "#hero-media").length || 0),
+      heroMetrics: (contextData.onSite.websiteContent?.filter((c: any) => c.url === "#metric").length || 0),
+      get hero() { return this.heroHeadline + this.heroSubheadline + this.heroCTA + this.heroMedia + this.heroMetrics; },
+
+      problem: (contextData.onSite.websiteContent?.filter((c: any) => c.url === "#problem").length || 0),
+      audience: (contextData.onSite.websiteContent?.filter((c: any) => c.url === "#audience").length || 0),
+      useCases: (contextData.onSite.websiteContent?.filter((c: any) => c.url === "#use-case").length || 0),
+      industries: (contextData.onSite.websiteContent?.filter((c: any) => c.url === "#industry").length || 0),
+      products: contextData.onSite.productsServices?.length || 0,
+
+      // Social Proof Breakdown
+      spTestimonials: contextData.onSite.websiteContent?.filter((c: any) => c.type === "testimonial").length || 0,
+      spCases: contextData.onSite.websiteContent?.filter((c: any) => c.type === "case_study").length || 0,
+      spBadges: contextData.onSite.websiteContent?.filter((c: any) => c.url === "#logo").length || 0,
+      spAwards: contextData.onSite.websiteContent?.filter((c: any) => c.url === "#award").length || 0,
+      spGuarantees: contextData.onSite.websiteContent?.filter((c: any) => c.url === "#guarantee").length || 0,
+      spIntegrations: contextData.onSite.websiteContent?.filter((c: any) => c.url === "#integration").length || 0,
+      get socialProof() { return this.spTestimonials + this.spCases + this.spBadges + this.spAwards + this.spGuarantees + this.spIntegrations; },
+
+      team: contextData.onSite.team?.length || 0,
+
+      // About Breakdown
+      aboutStory: (brandInfo?.foundingStory ? 1 : 0),
+      aboutMission: (brandInfo?.mission ? 1 : 0) + (brandInfo?.vision ? 1 : 0),
+      aboutValues: (brandInfo?.coreValues?.length || 0),
+      get about() { return this.aboutStory + this.aboutMission + this.aboutValues; },
+
+      faq: contextData.onSite.websiteContent?.filter((c: any) => c.type === "faq").length || 0,
+
+      // Contact Breakdown
+      contactPrimary: contextData.onSite.websiteContent?.filter((c: any) => ["#contact-email", "#contact-sales", "#contact-phone"].includes(c.url)).length || 0,
+      contactLocation: contextData.onSite.websiteContent?.filter((c: any) => ["#contact-address", "#contact-hours", "#contact-timezone"].includes(c.url)).length || 0,
+      contactSupport: contextData.onSite.websiteContent?.filter((c: any) => ["#contact-support", "#support-chat", "#support-ticket", "#support-community"].includes(c.url)).length || 0,
+      contactAdditional: contextData.onSite.websiteContent?.filter((c: any) => ["#contact-press", "#contact-partners", "#contact-careers", "#contact-newsletter"].includes(c.url)).length || 0,
+      get contact() { return this.contactPrimary + this.contactLocation + this.contactSupport + this.contactAdditional; },
+    };
+    // Recalculate Total for OnSite
+    const onSiteRealTotal = onSiteCounts.brand + onSiteCounts.pages + onSiteCounts.landing + onSiteCounts.blog + onSiteCounts.hero + onSiteCounts.problem + onSiteCounts.audience + onSiteCounts.useCases + onSiteCounts.industries + onSiteCounts.products + onSiteCounts.socialProof + onSiteCounts.team + onSiteCounts.about + onSiteCounts.faq + onSiteCounts.contact;
+
+    const offSiteCounts = {
+      // Owned Presence
+      osOfficialChannels: contextData.offSite.socialAccounts?.length || 0,
+      osExecutiveAccounts: contextData.offSite.executiveAccounts?.length || 0,
+      get ownedPresence() { return this.osOfficialChannels + this.osExecutiveAccounts; },
+
+      // Reviews & Listings
+      osReviews: contextData.offSite.reviewPlatforms?.length || 0,
+      osDirectories: contextData.offSite.directoryListings?.length || 0,
+      osStorefronts: contextData.offSite.ecommercePlatforms?.length || 0,
+      get reviewsListings() { return this.osReviews + this.osDirectories + this.osStorefronts; },
+
+      // Community
+      osForums: contextData.offSite.communities?.length || 0,
+      osQA: contextData.offSite.qaPlatforms?.length || 0,
+      osGroups: contextData.offSite.professionalNetworks?.length || 0,
+      get community() { return this.osForums + this.osQA + this.osGroups; },
+
+      // Media
+      osMediaChannels: contextData.offSite.mediaSources?.length || 0,
+      osCoverage: contextData.offSite.backlinks?.length || 0,
+      osEvents: contextData.offSite.externalEvents?.length || 0,
+      get media() { return this.osMediaChannels + this.osCoverage + this.osEvents; },
+
+      // KOLs
+      osCreators: contextData.offSite.influencerAccounts?.filter((i: any) => i.role === 'kol').length || 0,
+      osExperts: contextData.offSite.influencerAccounts?.filter((i: any) => i.role === 'analyst').length || 0,
+      osPress: contextData.offSite.influencerAccounts?.filter((i: any) => i.role === 'journalist' || i.role === 'media').length || 0,
+      get kols() { return this.osCreators + this.osExperts + this.osPress; },
+    };
+    // Correct total calculation
+    const offSiteTotal = offSiteCounts.ownedPresence + offSiteCounts.reviewsListings + offSiteCounts.community + offSiteCounts.media + offSiteCounts.kols;
+
+    const knowledgeCounts = {
+      uploaded: contextData.knowledge.sources?.filter((s: any) => s.type === 'uploaded').length || 0,
+      linked: contextData.knowledge.sources?.filter((s: any) => s.type === 'linked').length || 0,
+      pasted: contextData.knowledge.sources?.filter((s: any) => s.type === 'pasted').length || 0,
+      imported: contextData.knowledge.sources?.filter((s: any) => s.type === 'imported').length || 0,
+      saved: contextData.knowledge.sources?.filter((s: any) => s.type === 'saved').length || 0,
+      get total() { return this.uploaded + this.linked + this.pasted + this.imported + this.saved; }
+    };
+    const knowledgeTotal = knowledgeCounts.total;
+
+    // Merge local todos
+    const displayTodos = useMemo(() => {
+      const localTodos: TodoItem[] = [];
+      if (isContextEmpty) {
+        localTodos.push({
+          id: "local-fill-context",
+          content: "Fill Context (Required for optimal results)",
+          status: "pending",
+          updatedAt: new Date(),
+        });
+      }
+      return [...localTodos, ...todos];
+    }, [todos, isContextEmpty]);
+
+    return (
+      <>
+        <ContextWizard
+          open={wizardOpen}
+          onOpenChange={setWizardOpen}
+          defaultTab={defaultWizardTab}
+        />
+
+        <div className="flex h-full flex-col p-2 pr-0">
+          <div className="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-background">
+            <ResizablePanelGroup direction="vertical" autoSaveId="left-sidebar">
+              {/* Context Module - Top Section */}
+              <ResizablePanel
+                id="context"
+                order={1}
+                defaultSize={60}
+                minSize={30}
+                className="group/context flex flex-col overflow-hidden"
+              >
+                <div className="flex-shrink-0 flex h-12 items-center justify-between px-4 border-b border-border bg-muted/30">
+                  <div className="flex items-center gap-2">
+                    <Database size={16} className="text-muted-foreground" />
+                    <span className="text-sm font-semibold tracking-wide">
+                      Context
+                        </span>
+                  </div>
+                  <button
+                    onClick={() => openWizard("onSite")}
+                    className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-all hover:bg-accent hover:text-foreground group-hover/context:opacity-100"
+                    aria-label="Add context"
+                  >
+                    <Plus size={16} />
+                  </button>
+                </div>
+
+                <div className="flex-1 min-h-0 overflow-y-auto p-2">
+                  <div className="space-y-1">
+                    {/* On-site Tree */}
+                    <TreeItem
+                      label="On-site"
+                      count={onSiteRealTotal}
+                      icon={Network}
+                      defaultExpanded={true}
+                      onClick={() => openWizard("onSite")}
+                    >
+                      {/* Brand & Pages Column */}
+                      <TreeItem label="Brand Assets" count={onSiteCounts.brand} icon={Paintbrush} level={1} onClick={() => openWizard("onSite")}>
+                        <TreeItem label="Meta Info" count={onSiteCounts.brandMeta} icon={FileText} level={2} />
+                        <TreeItem label="Logo URL" count={onSiteCounts.brandLogo} icon={LinkIcon} level={2} />
+                        <TreeItem label="Colors" count={onSiteCounts.brandColors} icon={Palette} level={2} />
+                        <TreeItem label="Typography" count={onSiteCounts.brandFonts} icon={FileText} level={2} />
+                        <TreeItem label="Tone" count={onSiteCounts.brandTone} icon={MessageSquare} level={2} />
+                        <TreeItem label="Languages" count={onSiteCounts.brandLangs} icon={Globe} level={2} />
+                      </TreeItem>
+
+                      <TreeItem label="Key Website Pages" count={onSiteCounts.pages} icon={Layout} level={1} onClick={() => openWizard("onSite")}>
+                        <TreeItem label="Core Pages" count={onSiteCounts.pagesCore} icon={File} level={2} />
+                        <TreeItem label="Product Pages" count={onSiteCounts.pagesProduct} icon={ShoppingBag} level={2} />
+                        <TreeItem label="Resources" count={onSiteCounts.pagesResources} icon={Book} level={2} />
+                        <TreeItem label="Legal & Updates" count={onSiteCounts.pagesLegal} icon={FileText} level={2} />
+                      </TreeItem>
+
+                      <TreeItem label="Landing Pages" count={onSiteCounts.landing} icon={Megaphone} level={1} onClick={() => openWizard("onSite")} />
+                      <TreeItem label="Blog & Resources" count={onSiteCounts.blog} icon={Book} level={1} onClick={() => openWizard("onSite")} />
+
+                      {/* Content Column */}
+                      <TreeItem label="Hero Section" count={onSiteCounts.hero} icon={Flag} level={1} onClick={() => openWizard("onSite")}>
+                        <TreeItem label="Headline" count={onSiteCounts.heroHeadline} icon={Type} level={2} />
+                        <TreeItem label="Subheadline" count={onSiteCounts.heroSubheadline} icon={FileText} level={2} />
+                        <TreeItem label="Call to Action" count={onSiteCounts.heroCTA} icon={Layout} level={2} />
+                        <TreeItem label="Media" count={onSiteCounts.heroMedia} icon={FileText} level={2} />
+                        <TreeItem label="Metrics" count={onSiteCounts.heroMetrics} icon={TrendingUp} level={2} />
+                      </TreeItem>
+
+                      <TreeItem label="Problem Statement" count={onSiteCounts.problem} icon={AlertCircle} level={1} onClick={() => openWizard("onSite")} />
+                      <TreeItem label="Who We Serve" count={onSiteCounts.audience} icon={Users} level={1} onClick={() => openWizard("onSite")} />
+                      <TreeItem label="Use Cases" count={onSiteCounts.useCases} icon={Zap} level={1} onClick={() => openWizard("onSite")} />
+                      <TreeItem label="Industries" count={onSiteCounts.industries} icon={Building} level={1} onClick={() => openWizard("onSite")} />
+                      <TreeItem label="Products & Services" count={onSiteCounts.products} icon={ShoppingBag} level={1} onClick={() => openWizard("onSite")} />
+
+                      <TreeItem label="Social Proof & Trust" count={onSiteCounts.socialProof} icon={Star} level={1} onClick={() => openWizard("onSite")}>
+                        <TreeItem label="Testimonials" count={onSiteCounts.spTestimonials} icon={MessageSquare} level={2} />
+                        <TreeItem label="Case Studies" count={onSiteCounts.spCases} icon={FileText} level={2} />
+                        <TreeItem label="Badges" count={onSiteCounts.spBadges} icon={CheckCircle} level={2} />
+                        <TreeItem label="Awards" count={onSiteCounts.spAwards} icon={Star} level={2} />
+                        <TreeItem label="Guarantees" count={onSiteCounts.spGuarantees} icon={CheckCircle} level={2} />
+                        <TreeItem label="Integrations" count={onSiteCounts.spIntegrations} icon={LinkIcon} level={2} />
+                      </TreeItem>
+
+                      <TreeItem label="Leadership Team" count={onSiteCounts.team} icon={Users} level={1} onClick={() => openWizard("onSite")} />
+
+                      <TreeItem label="About Us" count={onSiteCounts.about} icon={Info} level={1} onClick={() => openWizard("onSite")}>
+                        <TreeItem label="Company Story" count={onSiteCounts.aboutStory} icon={Book} level={2} />
+                        <TreeItem label="Mission & Vision" count={onSiteCounts.aboutMission} icon={Target} level={2} />
+                        <TreeItem label="Core Values" count={onSiteCounts.aboutValues} icon={Star} level={2} />
+                      </TreeItem>
+
+                      <TreeItem label="FAQ" count={onSiteCounts.faq} icon={HelpCircle} level={1} onClick={() => openWizard("onSite")} />
+
+                      <TreeItem label="Contact Information" count={onSiteCounts.contact} icon={Mail} level={1} onClick={() => openWizard("onSite")}>
+                        <TreeItem label="Primary Contact" count={onSiteCounts.contactPrimary} icon={Phone} level={2} />
+                        <TreeItem label="Location & Hours" count={onSiteCounts.contactLocation} icon={MapPin} level={2} />
+                        <TreeItem label="Support Channels" count={onSiteCounts.contactSupport} icon={HelpCircle} level={2} />
+                        <TreeItem label="Additional" count={onSiteCounts.contactAdditional} icon={LayoutList} level={2} />
+                      </TreeItem>
+
+                    </TreeItem>
+
+                    {/* Off-site Tree */}
+                    <TreeItem
+                      label="Off-site"
+                      count={offSiteTotal}
+                      icon={Globe}
+                      onClick={() => openWizard("offSite")}
+                    >
+                      <TreeItem label="Owned Presence" count={offSiteCounts.ownedPresence} icon={Share2} level={1} onClick={() => openWizard("offSite")}>
+                        <TreeItem label="Official Channels" count={offSiteCounts.osOfficialChannels} icon={Globe} level={2} />
+                        <TreeItem label="Executive Accounts" count={offSiteCounts.osExecutiveAccounts} icon={User} level={2} />
+                      </TreeItem>
+
+                      <TreeItem label="Reviews & Listings" count={offSiteCounts.reviewsListings} icon={Star} level={1} onClick={() => openWizard("offSite")}>
+                        <TreeItem label="Reviews" count={offSiteCounts.osReviews} icon={MessageSquare} level={2} />
+                        <TreeItem label="Directories" count={offSiteCounts.osDirectories} icon={Folder} level={2} />
+                        <TreeItem label="Storefronts" count={offSiteCounts.osStorefronts} icon={ShoppingBag} level={2} />
+                      </TreeItem>
+
+                      <TreeItem label="Community" count={offSiteCounts.community} icon={Users} level={1} onClick={() => openWizard("offSite")}>
+                        <TreeItem label="Forums" count={offSiteCounts.osForums} icon={MessageSquare} level={2} />
+                        <TreeItem label="Q&A" count={offSiteCounts.osQA} icon={HelpCircle} level={2} />
+                        <TreeItem label="Groups" count={offSiteCounts.osGroups} icon={Users} level={2} />
+                      </TreeItem>
+
+                      <TreeItem label="Media" count={offSiteCounts.media} icon={Newspaper} level={1} onClick={() => openWizard("offSite")}>
+                        <TreeItem label="Channels" count={offSiteCounts.osMediaChannels} icon={Megaphone} level={2} />
+                        <TreeItem label="Coverage" count={offSiteCounts.osCoverage} icon={FileText} level={2} />
+                        <TreeItem label="Events" count={offSiteCounts.osEvents} icon={Briefcase} level={2} />
+                      </TreeItem>
+
+                      <TreeItem label="KOLs" count={offSiteCounts.kols} icon={Target} level={1} onClick={() => openWizard("offSite")}>
+                        <TreeItem label="Creators" count={offSiteCounts.osCreators} icon={Users} level={2} />
+                        <TreeItem label="Experts" count={offSiteCounts.osExperts} icon={User} level={2} />
+                        <TreeItem label="Press" count={offSiteCounts.osPress} icon={Newspaper} level={2} />
+                      </TreeItem>
+                    </TreeItem>
+
+                    {/* Knowledge Tree */}
+                    <TreeItem
+                      label="Knowledge"
+                      count={knowledgeTotal}
+                      icon={BookOpen}
+                      onClick={() => openWizard("knowledge")}
+                    >
+                      <TreeItem label="Uploaded" count={knowledgeCounts.uploaded} icon={Upload} level={1} onClick={() => openWizard("knowledge")} />
+                      <TreeItem label="Linked" count={knowledgeCounts.linked} icon={LinkIcon} level={1} onClick={() => openWizard("knowledge")} />
+                      <TreeItem label="Pasted" count={knowledgeCounts.pasted} icon={FileText} level={1} onClick={() => openWizard("knowledge")} />
+                      <TreeItem label="Cloud & Notes" count={knowledgeCounts.imported} icon={Cloud} level={1} onClick={() => openWizard("knowledge")} />
+                      <TreeItem label="Saved Artifacts" count={knowledgeCounts.saved} icon={Save} level={1} onClick={() => openWizard("knowledge")} />
+                    </TreeItem>
+                  </div>
+                </div>
+              </ResizablePanel>
+
+              <ResizableHandle withHandle />
+
+              {/* Tasks Module - Bottom Section */}
+              <ResizablePanel
+                id="tasks"
+                order={2}
+                defaultSize={40}
+                minSize={30}
+                className="flex flex-col overflow-hidden"
+              >
+                <div className="flex-shrink-0 flex h-12 items-center gap-2 px-4 border-b border-border bg-muted/30">
+                  <ListTodo size={16} className="text-muted-foreground" />
+                  <span className="text-sm font-semibold tracking-wide">
+                    Tasks
+                  </span>
+                  {displayTodos.length > 0 && (
+                    <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                      {displayTodos.filter((t) => t.status !== "completed").length} active
+                          </span>
+                          )}
+                </div>
+
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  {displayTodos.length === 0 ? (
+                    <div className="flex h-full items-center justify-center px-4 pb-4">
+                      <p className="text-xs text-muted-foreground">
+                        No tasks created yet
+                      </p>
+                  </div>
+                  ) : (
+                    <ScrollArea className="h-full px-4 py-2">
+                      <div className="space-y-1.5">
+                        {displayTodos.map((todo, index) => (
+                      <div
+                            key={`${todo.id}_${index}`}
+                            className={cn(
+                              "flex items-start gap-2 rounded-md p-2 text-sm transition-colors cursor-default",
+                              todo.status === "completed" && "opacity-50",
+                              todo.id === "local-fill-context" && "bg-amber-500/10 hover:bg-amber-500/20 cursor-pointer"
+                            )}
+                            onClick={() => {
+                              if (todo.id === "local-fill-context") {
+                                openWizard("onSite");
+                              }
+                            }}
+                          >
+                            {getStatusIcon(todo.status, "mt-0.5")}
+                            <span
+                              className={cn(
+                                "flex-1 break-words leading-relaxed",
+                                todo.status === "completed" && "line-through text-muted-foreground"
+                              )}
+                            >
+                          {todo.content}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                    </ScrollArea>
+                  )}
+                </div>
+              </ResizablePanel>
+            </ResizablePanelGroup>
+            </div>
+        </div >
     </>
   );
-});
+  }
+);
 
 LeftSidebar.displayName = "LeftSidebar";

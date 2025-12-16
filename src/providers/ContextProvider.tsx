@@ -12,6 +12,7 @@ import React, {
 } from "react";
 import { apiClient, type ContextFile, type ContextListResponse, type ContextSearchResult, type ContextContentResponse, type ContextChunksResponse } from "@/lib/api/client";
 import { useAuth } from "./AuthProvider";
+import { ContextData, initialContextData, OnSiteContext, OffSiteContext, KnowledgeContext } from "@/app/types/context";
 
 // ============ 类型定义 ============
 
@@ -50,6 +51,126 @@ const ContextContext = createContext<ContextContextValue | null>(null);
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 const SUPPORTED_TYPES = [".txt", ".md", ".pdf", ".docx"];
 
+// ============ Context Data Management (for ssrc Layout) ============
+
+interface ContextContextType {
+  contextData: ContextData;
+  updateOnSite: (data: Partial<OnSiteContext>) => void;
+  updateOffSite: (data: Partial<OffSiteContext>) => void;
+  updateKnowledge: (data: Partial<KnowledgeContext>) => void;
+  setContextData: (data: ContextData) => void;
+  isContextEmpty: boolean;
+  wizardOpen: boolean;
+  setWizardOpen: (open: boolean) => void;
+}
+
+const ContextMenuContext = createContext<ContextContextType | undefined>(undefined);
+
+// Context Data Provider Component
+function ContextDataProvider({ children }: { children: ReactNode }) {
+  const [contextData, setContextDataState] = useState<ContextData>(initialContextData);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    const savedContext = localStorage.getItem("deep-agents-context");
+    if (savedContext) {
+      try {
+        const parsed = JSON.parse(savedContext);
+        // Ensure structure matches current types (merge with initial)
+        setContextDataState({
+          ...initialContextData,
+          ...parsed,
+          onSite: { ...initialContextData.onSite, ...(parsed.onSite || {}) },
+          offSite: { ...initialContextData.offSite, ...(parsed.offSite || {}) },
+          knowledge: { ...initialContextData.knowledge, ...(parsed.knowledge || {}) },
+        });
+      } catch (e) {
+        console.error("Failed to parse context data from localStorage", e);
+      }
+    }
+    setIsLoaded(true);
+  }, []);
+
+  // Save to localStorage on change
+  useEffect(() => {
+    if (isLoaded) {
+      localStorage.setItem("deep-agents-context", JSON.stringify(contextData));
+    }
+  }, [contextData, isLoaded]);
+
+  const updateOnSite = (data: Partial<OnSiteContext>) => {
+    setContextDataState((prev) => ({
+      ...prev,
+      onSite: { ...prev.onSite, ...data },
+      metadata: { ...prev.metadata, lastUpdated: new Date().toISOString() },
+    }));
+  };
+
+  const updateOffSite = (data: Partial<OffSiteContext>) => {
+    setContextDataState((prev) => ({
+      ...prev,
+      offSite: { ...prev.offSite, ...data },
+      metadata: { ...prev.metadata, lastUpdated: new Date().toISOString() },
+    }));
+  };
+
+  const updateKnowledge = (data: Partial<KnowledgeContext>) => {
+    setContextDataState((prev) => ({
+      ...prev,
+      knowledge: { ...prev.knowledge, ...data },
+      metadata: { ...prev.metadata, lastUpdated: new Date().toISOString() },
+    }));
+  };
+
+  const setContextData = (data: ContextData) => {
+    setContextDataState(data);
+  };
+
+  // Check if context is effectively empty
+  const isContextEmpty = React.useMemo(() => {
+    const { onSite, offSite, knowledge } = contextData;
+
+    const hasOnSite =
+      !!onSite.brandInfo.name ||
+      onSite.landingPages.length > 0 ||
+      onSite.blogPosts.length > 0;
+
+    const hasOffSite =
+      offSite.officialAccounts.length > 0 ||
+      offSite.pressReleases.length > 0;
+
+    const hasKnowledge =
+      knowledge.competitors.length > 0 ||
+      knowledge.userUploads.length > 0 ||
+      knowledge.sources.length > 0;
+
+    return !hasOnSite && !hasOffSite && !hasKnowledge;
+  }, [contextData]);
+
+  if (!isLoaded) {
+    return <>{children}</>; // Return children while loading
+  }
+
+  return (
+    <ContextMenuContext.Provider
+      value={{
+        contextData,
+        updateOnSite,
+        updateOffSite,
+        updateKnowledge,
+        setContextData,
+        isContextEmpty,
+        wizardOpen,
+        setWizardOpen,
+      }}
+    >
+      {children}
+    </ContextMenuContext.Provider>
+  );
+}
+
 // ============ Provider ============
 
 interface ContextProviderProps {
@@ -57,6 +178,16 @@ interface ContextProviderProps {
 }
 
 export function ContextProvider({ children }: ContextProviderProps) {
+  // Wrap children with ContextDataProvider for ssrc layout support
+  return (
+    <ContextDataProvider>
+      <ContextProviderInner>{children}</ContextProviderInner>
+    </ContextDataProvider>
+  );
+}
+
+// Inner provider for file upload functionality
+function ContextProviderInner({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth();
 
   const [state, setState] = useState<ContextState>({
@@ -268,6 +399,15 @@ export function useContextFiles(): ContextContextValue {
   const context = useContext(ContextContext);
   if (!context) {
     throw new Error("useContextFiles must be used within ContextProvider");
+  }
+  return context;
+}
+
+// Hook for Context Menu (ssrc layout)
+export function useContextMenu() {
+  const context = useContext(ContextMenuContext);
+  if (context === undefined) {
+    throw new Error("useContextMenu must be used within a ContextProvider");
   }
   return context;
 }

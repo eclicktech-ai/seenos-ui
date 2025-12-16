@@ -297,13 +297,13 @@ export const ChatMessage = React.memo<ChatMessageProps>(
           <div
             className={cn(
               "flex h-8 w-8 items-center justify-center rounded-full",
-              isUser ? "bg-[#1a7f64] dark:bg-[#2dd4bf]" : "bg-gradient-to-br from-primary to-primary/80"
+              isUser ? "bg-foreground dark:bg-foreground" : "bg-muted"
             )}
           >
             {isUser ? (
-              <User size={16} className="text-white dark:text-gray-900" />
+              <User size={16} className="text-background dark:text-background" />
             ) : (
-              <Bot size={16} className="text-primary-foreground" />
+              <Bot size={16} className="text-foreground gradient-icon" />
             )}
           </div>
         </div>
@@ -332,7 +332,7 @@ export const ChatMessage = React.memo<ChatMessageProps>(
           {/* 用户消息直接显示 */}
           {isUser && hasContent && (
             <div className="relative flex justify-end">
-              <div className="overflow-hidden break-words rounded-2xl rounded-tr-sm bg-[#1a7f64] px-4 py-3 text-sm font-normal leading-[160%] text-white shadow-sm dark:bg-[#2dd4bf] dark:text-gray-900">
+              <div className="overflow-hidden break-words rounded-2xl rounded-tr-sm bg-foreground px-4 py-3 text-sm font-normal leading-[160%] text-background shadow-sm dark:bg-foreground dark:text-background">
                 <p className="m-0 whitespace-pre-wrap break-words text-sm leading-relaxed">
                   {messageContent}
                 </p>

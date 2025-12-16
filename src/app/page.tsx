@@ -3,15 +3,19 @@
 import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Sun, Moon, SquarePen, Copy, MessageCircle, LogOut, User } from "lucide-react";
+import { Sun, Moon, LogOut, User } from "lucide-react";
 import { ChatProvider, useChatContext } from "@/providers/ChatProvider";
 import { useAuth } from "@/providers/AuthProvider";
 import { ChatInterface } from "@/app/components/ChatInterface";
 import { LeftSidebar } from "@/app/components/LeftSidebar";
 import { RightSidebar } from "@/app/components/RightSidebar";
-import { ConversationList } from "@/app/components/ConversationList";
 import { SettingsDialog } from "@/app/components/SettingsDialog";
 import { useConversations } from "@/hooks/useConversations";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
 
 // ============ 主题切换 Hook ============
 function useTheme() {
@@ -52,88 +56,55 @@ function useTheme() {
 }
 
 // ============ 主内容组件 ============
-function MainContent({
-  showAllChats,
-  setShowAllChats,
-}: {
-  showAllChats: boolean;
-  setShowAllChats: (show: boolean) => void;
-}) {
-  const { todos, files, setFiles, isLoading, interrupt, cid, startNewChat, switchConversation } = useChatContext();
+function MainContent() {
+  const { todos, files, setFiles, isLoading, interrupt } = useChatContext();
 
   return (
-    <div className="flex flex-1 gap-3 overflow-hidden bg-muted p-3">
+    <ResizablePanelGroup
+      direction="horizontal"
+      autoSaveId="main-layout"
+      className="h-full"
+    >
       {/* Left Sidebar */}
-      <div className="w-[240px] flex-shrink-0 overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-        <LeftSidebar todos={todos} />
-      </div>
-
-      {/* Main Chat Area */}
-      <div
-        className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm"
+      <ResizablePanel
+        id="left-sidebar"
+        order={1}
+        defaultSize={20}
+        minSize={15}
       >
-        {/* Chat Header */}
-        <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-border px-4">
-          <div className="flex items-center gap-2">
-            <MessageCircle size={18} className="text-muted-foreground" />
-            <span className="text-sm font-medium text-foreground">Chat</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
-              <Copy size={14} />
-              Copy
-            </button>
-            <button
-              onClick={() => setShowAllChats(!showAllChats)}
-              className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-              <MessageCircle size={14} />
-              All Chats
-            </button>
-            <button
-              onClick={startNewChat}
-              disabled={!cid}
-              style={{ backgroundColor: 'hsl(173, 58%, 35%)' }}
-              className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
-            >
-              <SquarePen size={14} />
-              New Chat
-            </button>
-          </div>
-        </div>
+        <LeftSidebar todos={todos} />
+      </ResizablePanel>
 
-        {/* Chat Content */}
-        <div className="relative flex min-h-0 flex-1 overflow-hidden">
-          <div className="flex h-full flex-1 flex-col">
-            <ChatInterface />
-          </div>
+      <ResizableHandle className="relative w-2 bg-transparent hover:bg-border/10 transition-colors cursor-col-resize after:absolute after:inset-y-0 after:left-1/2 after:w-[1px] after:-translate-x-1/2 after:bg-transparent hover:after:bg-border/60" />
 
-          {/* All Chats Overlay */}
-          {showAllChats && (
-            <div className="absolute inset-0 z-10 bg-card">
-              <ConversationList
-                onSelect={(selectedCid) => {
-                  // 立即关闭列表，然后切换会话（异步加载历史）
-                  setShowAllChats(false);
-                  switchConversation(selectedCid);
-                }}
-                onClose={() => setShowAllChats(false)}
-              />
-            </div>
-          )}
-        </div>
-      </div>
+      {/* Center - Chat Area */}
+      <ResizablePanel
+        id="chat-area"
+        order={2}
+        defaultSize={60}
+        minSize={30}
+        className="flex flex-col"
+      >
+        <ChatInterface />
+      </ResizablePanel>
+
+      <ResizableHandle className="relative w-2 bg-transparent hover:bg-border/10 transition-colors cursor-col-resize after:absolute after:inset-y-0 after:left-1/2 after:w-[1px] after:-translate-x-1/2 after:bg-transparent hover:after:bg-border/60" />
 
       {/* Right Sidebar */}
-      <div className="w-[300px] flex-shrink-0 overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+      <ResizablePanel
+        id="right-sidebar"
+        order={3}
+        defaultSize={20}
+        minSize={15}
+      >
         <RightSidebar
           files={files}
           setFiles={setFiles}
           isLoading={isLoading}
           interrupt={interrupt}
         />
-      </div>
-    </div>
+      </ResizablePanel>
+    </ResizablePanelGroup>
   );
 }
 
@@ -142,7 +113,6 @@ function AuthenticatedHome() {
   const router = useRouter();
   const { user, logout, token, isAuthenticated } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const [showAllChats, setShowAllChats] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   
   // 在顶层使用 useConversations hook，确保 mutate 始终可用
@@ -231,12 +201,11 @@ function AuthenticatedHome() {
         </header>
 
         {/* Main Content */}
-        <ChatProvider onHistoryRevalidate={() => mutateConversations()}>
-          <MainContent
-            showAllChats={showAllChats}
-            setShowAllChats={setShowAllChats}
-          />
-        </ChatProvider>
+        <div className="flex-1 overflow-hidden pt-2">
+          <ChatProvider onHistoryRevalidate={() => mutateConversations()}>
+            <MainContent />
+          </ChatProvider>
+        </div>
       </div>
     </>
   );
