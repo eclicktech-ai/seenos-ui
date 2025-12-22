@@ -400,7 +400,6 @@ export function ConfigDialog({
     if (!contentRef.current) return;
 
     const container = contentRef.current;
-    const scrollTop = container.scrollTop;
     const containerTop = container.getBoundingClientRect().top;
 
     const sections: { id: TabId; ref: React.RefObject<HTMLDivElement | null> }[] = [
@@ -482,11 +481,6 @@ export function ConfigDialog({
   };
 
   // Helper to get selected model for current provider
-  const getSelectedModelForProvider = (provider: ApiProvider): string => {
-    if (!provider) return "";
-    return selectedModels[provider] || "";
-  };
-
   // Helper to set selected model for a provider
   // For openrouter, we need to include the sub-provider preset in the key
   const setSelectedModelForProvider = (provider: ApiProvider, model: string, subPreset?: string) => {

@@ -278,20 +278,41 @@ export type ContentDeltaEventData = MessageDeltaEventData;
 export interface MessageEndEventData {
   messageId: string;
   content?: string;
-  message?: Message;          // 完整消息（包含所有 toolCalls 和 metadata）
+  // FRONTEND_API_GUIDE.md：message_end 里会带格式化后的 toolCalls / metadata
+  toolCalls?: ToolCall[];
+  metadata?: Message['metadata'];
+  // 部分后端会直接返回完整 message（包含所有 toolCalls 和 metadata）
+  message?: Message;
 }
 
 export interface ToolCallStartEventData {
-  messageId?: string;         // 关联的消息 ID
-  toolCallId: string;
-  toolName: string;
-  type?: 'function' | 'subagent';  // 类型：普通函数或子代理
-  toolType?: 'tool' | 'subagent';  // WEBSOCKET_FRONTEND_GUIDE.md 格式
-  args?: Record<string, unknown>;
-  startedAt?: string;         // 开始时间 (ISO)
+  /** 关联的消息 ID */
+  messageId?: string;
+
+  toolCall?: {
+    id: string;
+    name: string;
+    type: 'function' | 'subagent';
+    arguments?: Record<string, unknown>;
+    startedAt?: string;
+    status?: 'running';
+  };
+
+  /**
+   * 兼容旧/扁平格式：
+   * toolCallId / toolName / args
+   */
+  toolCallId?: string;
+  toolName?: string;
+  type?: 'function' | 'subagent';       // 旧字段：普通函数或子代理
+  toolType?: 'tool' | 'subagent';       // 旧字段：tool/subagent
+  args?: Record<string, unknown>;       // 旧字段：参数
+  startedAt?: string;                   // 开始时间 (ISO)
   status?: 'running';
-  subagentName?: string;      // 如果在子代理内运行
-  targetSubagent?: string;    // 对于 task() 调用
+
+  /** 子代理上下文 */
+  subagentName?: string;                // 如果在子代理内运行
+  targetSubagent?: string;              // 对于 task() 调用
 }
 
 // tool_call_end 和 tool_call_result 使用相同的数据结构
@@ -328,7 +349,7 @@ export interface LegacySubAgentStartEventData {
   input: Record<string, unknown>;
 }
 
-export interface SubAgentEndEventData {
+export interface LegacySubAgentEndEventData {
   subAgentId: string;
   output?: Record<string, unknown>;
   error?: string;
@@ -484,5 +505,54 @@ export interface SourceUsage {
   totalTokens: number;
   cost: number;
   callCount: number;
+}
+
+// ============ Project 相关 ============
+
+/** 项目 */
+export interface Project {
+  id: string;
+  name: string;
+  domain?: string;
+  websiteUrl: string;
+  settings?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 项目列表响应 */
+export interface ProjectListResponse {
+  projects: Project[];
+  total: number;
+}
+
+/** URL 验证请求 */
+export interface ValidateUrlRequest {
+  url: string;
+}
+
+/** URL 验证响应 */
+export interface ValidateUrlResponse {
+  input_url: string;      // 原始输入
+  normalized_url: string; // 标准化后的 URL
+  is_valid: boolean;      // 是否有效
+  reachable: boolean;     // 是否可访问
+  status_code: number;    // HTTP 状态码
+  final_url: string;      // 最终 URL（可能重定向）
+  error?: string;         // 错误信息
+}
+
+/** 创建项目请求 */
+export interface CreateProjectRequest {
+  name: string;
+  url: string;
+  settings?: Record<string, unknown>;
+}
+
+/** 更新项目请求 */
+export interface UpdateProjectRequest {
+  name?: string;
+  url?: string;
+  settings?: Record<string, unknown>;
 }
 

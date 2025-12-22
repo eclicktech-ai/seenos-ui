@@ -1,0 +1,59 @@
+﻿{
+    "brand":  {
+                  "brand":  {
+                                "logoUrl":  null,
+                                "brandName":  "Autonomous SEO. Autopilot Growth.",
+                                "toneOfVoice":  null,
+                                "primaryColor":  null,
+                                "brandSubtitle":  null,
+                                "secondaryColor":  null,
+                                "metaDescription":  "SeoPage.ai is an AI-powered agent that automates the creation, optimization, and maintenance of SEO-optimized pages like alternatives, best-of lists, FAQs,"
+                            },
+                  "contact":  {
+                                  "address":  "#08-34 OXLEY BIZHUB Singapore, 408732",
+                                  "twitter_url":  null,
+                                  "linkedin_url":  null
+                              }
+              },
+    "onsite":  {
+                   "singletons":  {
+                                      "contact_info":  "@{address=#08-34 OXLEY BIZHUB Singapore, 408732; twitter_url=; linkedin_url=}",
+                                      "brand_assets":  "@{logoUrl=; brandName=Autonomous SEO. Autopilot Growth.; toneOfVoice=; primaryColor=; brandSubtitle=; secondaryColor=; metaDescription=SeoPage.ai is an AI-powered agent that automates the creation, optimization, and maintenance of SEO-optimized pages like alternatives, best-of lists, FAQs,}",
+                                      "hero_section":  "@{ctas=System.Object[]; headline=Autonomous SEO. Autopilot Growth.; subheadline=SeoPage.ai is an AI-powered agent that automates the creation, optimization, and maintenance of SEO-optimized pages like alternatives, best-of lists, FAQs,}"
+                                  },
+                   "items":  {
+                                 "sitemap_urls":  "                                                                                                   ",
+                                 "header_links":  "",
+                                 "footer_links":  "                                            "
+                             },
+                   "persons":  {
+
+                               }
+               },
+    "offsite":  {
+                    "singletons":  {
+                                       "monitoring_scope":  "@{hashtags=System.Object[]; brandKeywords=System.Object[]; productKeywords=System.Object[]}"
+                                   },
+                    "items":  {
+                                  "target_keywords":  "    ",
+                                  "press_coverage":  "      "
+                              },
+                    "persons":  {
+                                    "kols":  "         "
+                                },
+                    "entities":  {
+                                     "competitors":  "           ",
+                                     "social_profiles":  "       ",
+                                     "review_platforms":  "      "
+                                 }
+                },
+    "knowledge":  {
+                      "total_sources":  0,
+                      "by_type":  {
+
+                                  },
+                      "sources":  [
+
+                                  ]
+                  }
+}

@@ -209,6 +209,7 @@ export const ChatMessage = React.memo<ChatMessageProps>(
         loadSettings();
       };
       
+
       window.addEventListener("storage", handleStorageChange);
       window.addEventListener("settings-updated", handleSettingsUpdate);
       
@@ -224,9 +225,6 @@ export const ChatMessage = React.memo<ChatMessageProps>(
     const messageContent = extractStringFromMessageContent(message);
     const hasContent = messageContent && messageContent.trim() !== "";
     const hasToolCalls = toolCalls.length > 0;
-    
-    // 是否显示思考动画：非用户消息、没有内容、正在思考
-    const showThinking = !isUser && !hasContent && !hasToolCalls && isThinking;
     
     // 提取子代理调用
     // 根据 FRONTEND_API_GUIDE.md: type='subagent' 或 name='task' 且有 targetSubagent/subagent_type
@@ -311,6 +309,7 @@ export const ChatMessage = React.memo<ChatMessageProps>(
         {/* Message Content */}
         <div
           className={cn(
+            
             "min-w-0 flex-1",
             isUser ? "max-w-[70%]" : "max-w-full"
           )}

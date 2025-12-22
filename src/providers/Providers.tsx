@@ -3,6 +3,7 @@
 import { ReactNode } from "react";
 import { AuthProvider } from "./AuthProvider";
 import { ContextProvider } from "./ContextProvider";
+import { ProjectProvider } from "./ProjectProvider";
 
 interface ProvidersProps {
   children: ReactNode;
@@ -15,9 +16,11 @@ interface ProvidersProps {
 export function Providers({ children }: ProvidersProps) {
   return (
     <AuthProvider>
-      <ContextProvider>
-        {children}
-      </ContextProvider>
+      <ProjectProvider>
+        <ContextProvider>
+          {children}
+        </ContextProvider>
+      </ProjectProvider>
     </AuthProvider>
   );
 }

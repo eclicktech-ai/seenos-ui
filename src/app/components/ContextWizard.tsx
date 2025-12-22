@@ -15,7 +15,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useContextMenu } from "@/providers/ContextProvider";
-import { Plus, X, Link2, ShoppingBag, Layout, Users, Megaphone, MessageSquare, Target, Globe, FileText, Rss, Map, Palette, BookOpen, Flag, AlertTriangle, Zap, Building2, Star, UserCircle, Info, HelpCircle, Newspaper, Network, Save, Cloud, Upload } from "lucide-react";
+import { Plus, X, Link2, ShoppingBag, Layout, Users, Megaphone, MessageSquare, Target, Globe, FileText, Rss, Map, Palette, BookOpen, Flag, AlertTriangle, Zap, Building2, Star, UserCircle, Info, HelpCircle, Newspaper, Network, Save, Cloud, Upload, Edit, Loader2 } from "lucide-react";
+import { ContextEditDialog } from "@/app/components/ContextEditDialog";
+import { getSectionConfig, type SectionConfig } from "@/lib/context/section-mapping";
 import { v4 as uuidv4 } from 'uuid';
 import {
   LandingPage,
@@ -33,7 +35,6 @@ import {
   PressRelease,
   SocialMediaContent,
   UserUpload,
-  SocialAccount,
   CommunityForum,
   QAPlatform,
   MediaSource,
@@ -54,8 +55,55 @@ interface ContextWizardProps {
 }
 
 export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: ContextWizardProps) {
-  const { contextData, updateOnSite, updateOffSite, updateKnowledge } = useContextMenu();
+  const { contextData, updateOnSite, updateOffSite, updateKnowledge, reloadContextData } = useContextMenu();
   const [activeTab, setActiveTab] = useState(defaultTab);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editDialogConfig, setEditDialogConfig] = useState<SectionConfig | null>(null);
+
+  // Helper function to open ContextEditDialog
+  const openEditDialog = (label: string) => {
+    const config = getSectionConfig(label);
+    if (config) {
+      setEditDialogConfig(config);
+      setEditDialogOpen(true);
+    }
+  };
+
+  // Load data when wizard opens (only once per open)
+  const [isLoadingData, setIsLoadingData] = React.useState(false);
+  const lastOpenStateRef = React.useRef(false);
+  
+  // Check if we have any data to avoid showing loading screen unnecessarily
+  const hasExistingData = React.useMemo(() => {
+    return (
+      contextData.onSite.productsServices.length > 0 ||
+      contextData.onSite.landingPages.length > 0 ||
+      contextData.onSite.blogPosts.length > 0 ||
+      contextData.offSite.socialAccounts.length > 0 ||
+      contextData.offSite.pressReleases.length > 0
+    );
+  }, [contextData]);
+  
+  React.useEffect(() => {
+    if (open && !lastOpenStateRef.current) {
+      lastOpenStateRef.current = true;
+      // Only show loading indicator if we don't have existing data
+      if (!hasExistingData) {
+        setIsLoadingData(true);
+      }
+      // Refresh context data when wizard opens to ensure latest data is shown
+      reloadContextData().then(() => {
+        setIsLoadingData(false);
+      }).catch(error => {
+        console.error("[ContextWizard] Failed to reload context data:", error);
+        setIsLoadingData(false);
+      });
+    } else if (!open) {
+      lastOpenStateRef.current = false;
+      setIsLoadingData(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]); // Only depend on open state
 
   // --- Helper Components ---
 
@@ -84,37 +132,37 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
     };
 
     return (
-      <div className="space-y-2">
+      <div className="space-y-3">
         {label && (
           <div className="flex items-center justify-between">
-            <Label className="text-xs text-muted-foreground">{label}</Label>
-            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={add}>
-              <Plus className="h-3.5 w-3.5" />
+            <Label className="text-sm text-muted-foreground">{label}</Label>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={add}>
+              <Plus className="h-4 w-4" />
             </Button>
           </div>
         )}
-        <div className="space-y-1.5" style={maxHeight === "none" ? {} : { maxHeight, overflowY: "auto" }}>
+        <div className="space-y-2.5" style={maxHeight === "none" ? {} : { maxHeight, overflowY: "auto" }}>
           {values.length === 0 ? (
             <div
-              className="text-xs text-muted-foreground text-center py-2 border border-dashed rounded-md cursor-pointer hover:bg-accent/50"
+              className="text-sm text-muted-foreground text-center py-3 border border-dashed rounded-md cursor-pointer hover:bg-accent/50"
               onClick={add}
             >
               Click + to add{label ? ` ${label.toLowerCase()}` : ''}
             </div>
           ) : (
             values.map((val, idx) => (
-              <div key={idx} className="flex gap-1.5 group">
+              <div key={idx} className="flex gap-2 group">
                 <div className="relative flex-1">
-                  {Icon && <Icon className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" />}
+                  {Icon && <Icon className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />}
                   <Input
-                    className={`h-8 text-xs ${Icon ? 'pl-7' : ''}`}
+                    className={`h-9 text-sm ${Icon ? 'pl-8' : ''}`}
                     value={val}
                     onChange={(e) => update(idx, e.target.value)}
                     placeholder={placeholder}
                   />
                 </div>
-                <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 shrink-0" onClick={() => remove(idx)}>
-                  <X className="h-3 w-3" />
+                <Button variant="ghost" size="icon" className="h-9 w-9 opacity-0 group-hover:opacity-100 shrink-0" onClick={() => remove(idx)}>
+                  <X className="h-3.5 w-3.5" />
                 </Button>
               </div>
             ))
@@ -143,37 +191,37 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
     maxHeight?: string;
   }) => {
     return (
-      <div className="space-y-2">
+      <div className="space-y-3">
         {label && (
           <div className="flex items-center justify-between">
-            <Label className="text-xs text-muted-foreground">{label}</Label>
+            <Label className="text-sm text-muted-foreground">{label}</Label>
             <div className="flex items-center gap-2">
-              {items.length > 0 && <span className="text-xs text-muted-foreground/60">{items.length}</span>}
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onAdd}>
-                <Plus className="h-3.5 w-3.5" />
+              {items.length > 0 && <span className="text-sm text-muted-foreground/60">{items.length}</span>}
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onAdd}>
+                <Plus className="h-4 w-4" />
               </Button>
             </div>
           </div>
         )}
-        <div className="space-y-2" style={maxHeight === "none" ? {} : { maxHeight, overflowY: "auto" }}>
+        <div className="space-y-3" style={maxHeight === "none" ? {} : { maxHeight, overflowY: "auto" }}>
           {
             items.length === 0 ? (
               <div
-                className="text-xs text-muted-foreground text-center py-2 border border-dashed rounded-md cursor-pointer hover:bg-accent/50"
+                className="text-sm text-muted-foreground text-center py-3 border border-dashed rounded-md cursor-pointer hover:bg-accent/50"
                 onClick={onAdd}
               >
                 Click + to add{label ? ` ${label.toLowerCase()}` : ''}
               </div>
             ) : (
               items.map((item, idx) => (
-                <div key={item.id} className="relative group rounded-lg border bg-card/50 p-3">
+                <div key={item.id} className="relative group rounded-xl border bg-card/50 p-4">
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="absolute right-1.5 top-1.5 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute right-2 top-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
                     onClick={() => onRemove(item.id)}
                   >
-                    <X className="h-3 w-3" />
+                    <X className="h-3.5 w-3.5" />
                   </Button>
                   {renderItem(item, (updated) => {
                     const newItems = [...items];
@@ -749,31 +797,54 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
   );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[1200px] h-[80vh] flex flex-col p-0 gap-0">
-        <DialogHeader className="px-6 py-4 border-b shrink-0 bg-muted/30">
-          <DialogTitle>Context Wizard</DialogTitle>
-          <DialogDescription>
+    <>
+      <ContextEditDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        config={editDialogConfig}
+        onSuccess={async () => {
+          console.log('[ContextWizard] ContextEditDialog onSuccess callback triggered, reloading context data...');
+          await reloadContextData();
+          console.log('[ContextWizard] Context data reloaded successfully');
+        }}
+      />
+      
+      <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[1200px] h-[80vh] flex flex-col p-0 gap-0 [&_.text-xs]:text-sm [&_.h-8]:h-9 [&_.p-4]:p-5 [&_.rounded-lg]:rounded-xl [&_.space-y-3]:space-y-4 [&_.space-y-4]:space-y-5">
+        <DialogHeader className="px-8 py-6 border-b shrink-0 bg-muted/30">
+          <DialogTitle className="text-lg">Context Wizard</DialogTitle>
+          <DialogDescription className="text-sm leading-relaxed">
             Define your brand identity, products, team, competitive positioning, and upload supporting knowledge to power smarter agent decisions.
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden flex flex-col min-h-0">
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="flex-1 flex flex-col min-h-0">
-            <TabsList className="grid w-full grid-cols-3 shrink-0 h-11 p-1 bg-muted/80">
-              <TabsTrigger value="onSite" className="flex items-center gap-2 font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm"><Network className="h-4 w-4" /> On-site</TabsTrigger>
-              <TabsTrigger value="offSite" className="flex items-center gap-2 font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm"><Globe className="h-4 w-4" /> Off-site</TabsTrigger>
-              <TabsTrigger value="knowledge" className="flex items-center gap-2 font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm"><BookOpen className="h-4 w-4" /> Knowledge</TabsTrigger>
-            </TabsList>
+            <div className="px-8 py-4 shrink-0 border-b bg-background/40">
+              <TabsList className="grid w-full grid-cols-3 h-12 p-1.5 bg-muted/70 rounded-xl">
+                <TabsTrigger value="onSite" className="flex items-center gap-2 font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm"><Network className="h-4 w-4" /> On-site</TabsTrigger>
+                <TabsTrigger value="offSite" className="flex items-center gap-2 font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm"><Globe className="h-4 w-4" /> Off-site</TabsTrigger>
+                <TabsTrigger value="knowledge" className="flex items-center gap-2 font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm"><BookOpen className="h-4 w-4" /> Knowledge</TabsTrigger>
+              </TabsList>
+            </div>
 
             <div className="flex-1 overflow-y-auto min-h-0">
+              {isLoadingData ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center space-y-3">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
+                    <p className="text-sm text-muted-foreground">Loading context data...</p>
+                  </div>
+                </div>
+              ) : (
+                <>
               {/* On-site Tab */}
-              <TabsContent value="onSite" className="p-6 m-0 h-full overflow-y-auto">
-                <div className="flex gap-6 pb-10">
+              <TabsContent value="onSite" className="p-8 m-0 h-full overflow-y-auto">
+                <div className="flex gap-8 pb-12">
                   {/* Left Column - 1/3 Width: Brand Assets & Pages */}
-                  <div className="w-1/3 shrink-0 space-y-4">
+                  <div className="w-1/3 shrink-0 space-y-5">
                     {/* Brand Assets - Expanded */}
-                    <div className="p-4 border rounded-lg bg-card/50 space-y-4">
+                    <div className="p-5 border rounded-xl bg-card/50 space-y-5">
                       <h3 className="text-sm font-semibold flex items-center gap-2 border-b pb-2">
                         <Palette className="h-5 w-5 text-muted-foreground" /> Brand Assets
                       </h3>
@@ -930,7 +1001,7 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
                     </div>
 
                     {/* Key Website Pages */}
-                    <div className="p-4 border rounded-lg bg-card/50 space-y-4">
+                    <div className="p-5 border rounded-xl bg-card/50 space-y-5">
                       <h3 className="text-sm font-semibold flex items-center gap-2 border-b pb-2">
                         <Layout className="h-4 w-4 text-muted-foreground" /> Key Website Pages
                       </h3>
@@ -1745,13 +1816,13 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
               </TabsContent>
 
               {/* Off-site Tab */}
-              <TabsContent value="offSite" className="p-6 m-0 h-full overflow-y-auto">
-                <div className="flex gap-6 pb-10">
+              <TabsContent value="offSite" className="p-8 m-0 h-full overflow-y-auto">
+                <div className="flex gap-8 pb-12">
                   {/* Left Column - 1/3 Width: Monitoring, Tracking, Alerts, Collection */}
-                  <div className="w-1/3 shrink-0 space-y-4">
+                  <div className="w-1/3 shrink-0 space-y-5">
 
                     {/* Section 1: Monitoring Scope */}
-                    <div className="p-4 border rounded-lg bg-card/50 space-y-4">
+                    <div className="p-5 border rounded-xl bg-card/50 space-y-5">
                       <h3 className="text-sm font-semibold flex items-center gap-2 border-b pb-2">
                         <Target className="h-5 w-5 text-muted-foreground" /> Monitoring Scope
                       </h3>
@@ -1780,21 +1851,33 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
                     </div>
                   </div>
                   {/* Right Column - 2/3 Width: MECE Layout */}
-                  <div className="flex-1 space-y-4">
+                  <div className="flex-1 space-y-5">
                     {/* ===== SECTION 1: OWNED PRESENCE (整行) ===== */}
-                    <div className="p-4 border rounded-lg bg-card/50 space-y-3">
+                    <div className="p-5 border rounded-xl bg-card/50 space-y-4">
                       <h3 className="text-sm font-semibold flex items-center gap-2"><Building2 className="h-4 w-4 text-muted-foreground" /> Owned Presence</h3>
                       <div className="grid grid-cols-2 gap-4">
                         {/* Official Channels */}
                         <div className="space-y-2">
-                          <div className="flex items-center justify-between"><Label className="text-xs text-muted-foreground">Official Channels</Label><Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => updateOffSite({ socialAccounts: [...contextData.offSite.socialAccounts, { id: uuidv4(), platform: 'X', accountName: '', url: '', isPriority: false }] })}><Plus className="h-3 w-3" /></Button></div>
-                          <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs text-muted-foreground">Official Channels</Label>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-6 text-xs gap-1" 
+                              onClick={() => openEditDialog('Official Channels')}
+                            >
+                              <Edit className="h-3 w-3" />
+                              Manage
+                            </Button>
+                          </div>
+                          <div 
+                            className="text-xs text-muted-foreground text-center py-4 border border-dashed rounded-md cursor-pointer hover:bg-accent/50 transition-colors"
+                            onClick={() => openEditDialog('Official Channels')}
+                          >
                             {contextData.offSite.socialAccounts.length === 0 ? (
-                              <div className="text-xs text-muted-foreground text-center py-2 border border-dashed rounded-md cursor-pointer hover:bg-accent/50" onClick={() => updateOffSite({ socialAccounts: [...contextData.offSite.socialAccounts, { id: uuidv4(), platform: 'X', accountName: '', url: '', isPriority: false }] })}>
-                                Click + to add channels
-                              </div>
+                              <>Click to add social media channels</>
                             ) : (
-                              contextData.offSite.socialAccounts.map((a: SocialAccount) => (<div key={a.id} className="flex gap-1 group text-xs"><select className="h-8 w-20 rounded border px-1 text-xs" value={a.platform} onChange={(e) => updateOffSite({ socialAccounts: contextData.offSite.socialAccounts.map((x: SocialAccount) => x.id === a.id ? { ...x, platform: e.target.value } : x) })}><option>X</option><option>LinkedIn</option><option>Facebook</option><option>Instagram</option><option>YouTube</option><option>TikTok</option><option>Threads</option><option>Pinterest</option><option>Podcast</option><option>Newsletter</option><option>Blog</option><option>Other</option></select><Input className="h-8 text-xs flex-1" placeholder="URL" value={a.url} onChange={(e) => updateOffSite({ socialAccounts: contextData.offSite.socialAccounts.map((x: SocialAccount) => x.id === a.id ? { ...x, url: e.target.value } : x) })} /><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={() => updateOffSite({ socialAccounts: contextData.offSite.socialAccounts.filter((x: SocialAccount) => x.id !== a.id) })}><X className="h-3 w-3" /></Button></div>))
+                              <>{contextData.offSite.socialAccounts.length} channel{contextData.offSite.socialAccounts.length > 1 ? 's' : ''} configured</>
                             )}
                           </div>
                         </div>
@@ -1817,7 +1900,7 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
                     {/* ===== ROW 1: Reviews & Community ===== */}
                     <div className="grid grid-cols-2 gap-4">
                       {/* Reviews & Listings */}
-                      <div className="p-4 border rounded-lg bg-card/50 space-y-3">
+                      <div className="p-5 border rounded-xl bg-card/50 space-y-4">
                         <h3 className="text-sm font-semibold flex items-center gap-2"><Star className="h-4 w-4 text-muted-foreground" /> Reviews & Listings</h3>
                         {/* Reviews */}
                         <div className="space-y-2">
@@ -1826,7 +1909,7 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
                             {contextData.offSite.reviewPlatforms.length === 0 ? (
                               <div className="text-xs text-muted-foreground text-center py-2 border border-dashed rounded-md cursor-pointer hover:bg-accent/50" onClick={() => updateOffSite({ reviewPlatforms: [...contextData.offSite.reviewPlatforms, { id: uuidv4(), platform: 'G2', profileUrl: '', fetchDetails: true }] })}>Click + to add reviews</div>
                             ) : (
-                              contextData.offSite.reviewPlatforms.map((r: ReviewPlatform) => (<div key={r.id} className="flex gap-1 group text-xs"><select className="h-8 w-24 rounded border px-1 text-xs" value={r.platform} onChange={(e) => updateOffSite({ reviewPlatforms: contextData.offSite.reviewPlatforms.map((x: ReviewPlatform) => x.id === r.id ? { ...x, platform: e.target.value } : x) })}><option>G2</option><option>Capterra</option><option>TrustRadius</option><option>Trustpilot</option><option>Gartner</option><option>Glassdoor</option><option>Yelp</option><option>Other</option></select><Input className="h-8 text-xs flex-1" placeholder="Profile URL" value={r.profileUrl} onChange={(e) => updateOffSite({ reviewPlatforms: contextData.offSite.reviewPlatforms.map((x: ReviewPlatform) => x.id === r.id ? { ...x, profileUrl: e.target.value } : x) })} /><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={() => updateOffSite({ reviewPlatforms: contextData.offSite.reviewPlatforms.filter((x: ReviewPlatform) => x.id !== r.id) })}><X className="h-3 w-3" /></Button></div>))
+                              contextData.offSite.reviewPlatforms.map((r: ReviewPlatform) => (<div key={r.id} className="flex gap-1 group text-xs"><select className="h-8 w-24 rounded border px-1 text-xs" value={r.platform || ''} onChange={(e) => updateOffSite({ reviewPlatforms: contextData.offSite.reviewPlatforms.map((x: ReviewPlatform) => x.id === r.id ? { ...x, platform: e.target.value } : x) })}><option>G2</option><option>Capterra</option><option>TrustRadius</option><option>Trustpilot</option><option>Gartner</option><option>Glassdoor</option><option>Yelp</option><option>Product Hunt</option><option>Other</option></select><Input className="h-8 text-xs flex-1" placeholder="Profile URL" value={r.profileUrl} onChange={(e) => updateOffSite({ reviewPlatforms: contextData.offSite.reviewPlatforms.map((x: ReviewPlatform) => x.id === r.id ? { ...x, profileUrl: e.target.value } : x) })} /><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={() => updateOffSite({ reviewPlatforms: contextData.offSite.reviewPlatforms.filter((x: ReviewPlatform) => x.id !== r.id) })}><X className="h-3 w-3" /></Button></div>))
                             )}
                           </div>
                         </div>
@@ -1848,7 +1931,7 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
                             {contextData.offSite.ecommercePlatforms.length === 0 ? (
                               <div className="text-xs text-muted-foreground text-center py-2 border border-dashed rounded-md cursor-pointer hover:bg-accent/50" onClick={() => updateOffSite({ ecommercePlatforms: [...contextData.offSite.ecommercePlatforms, { id: uuidv4(), platform: 'App Store', storeName: '', storeUrl: '', collectReviews: true, collectQA: false, collectRatings: true, collectSalesRank: false }] })}>Click + to add storefronts</div>
                             ) : (
-                              contextData.offSite.ecommercePlatforms.map((e: EcommercePlatform) => (<div key={e.id} className="flex gap-1 group text-xs"><select className="h-8 w-24 rounded border px-1 text-xs" value={e.platform} onChange={(ev) => updateOffSite({ ecommercePlatforms: contextData.offSite.ecommercePlatforms.map((x: EcommercePlatform) => x.id === e.id ? { ...x, platform: ev.target.value } : x) })}><option>App Store</option><option>Google Play</option><option>Microsoft Store</option><option>Amazon</option><option>eBay</option><option>Etsy</option><option>Walmart</option><option>Other</option></select><Input className="h-8 text-xs flex-1" placeholder="Store URL" value={e.storeUrl} onChange={(ev) => updateOffSite({ ecommercePlatforms: contextData.offSite.ecommercePlatforms.map((x: EcommercePlatform) => x.id === e.id ? { ...x, storeUrl: ev.target.value } : x) })} /><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={() => updateOffSite({ ecommercePlatforms: contextData.offSite.ecommercePlatforms.filter((x: EcommercePlatform) => x.id !== e.id) })}><X className="h-3 w-3" /></Button></div>))
+                              contextData.offSite.ecommercePlatforms.map((e: EcommercePlatform) => (<div key={e.id} className="flex gap-1 group text-xs"><select className="h-8 w-24 rounded border px-1 text-xs" value={e.platform || ''} onChange={(ev) => updateOffSite({ ecommercePlatforms: contextData.offSite.ecommercePlatforms.map((x: EcommercePlatform) => x.id === e.id ? { ...x, platform: ev.target.value } : x) })}><option>App Store</option><option>Google Play</option><option>Microsoft Store</option><option>Amazon</option><option>eBay</option><option>Etsy</option><option>Walmart</option><option>Other</option></select><Input className="h-8 text-xs flex-1" placeholder="Store URL" value={e.storeUrl} onChange={(ev) => updateOffSite({ ecommercePlatforms: contextData.offSite.ecommercePlatforms.map((x: EcommercePlatform) => x.id === e.id ? { ...x, storeUrl: ev.target.value } : x) })} /><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={() => updateOffSite({ ecommercePlatforms: contextData.offSite.ecommercePlatforms.filter((x: EcommercePlatform) => x.id !== e.id) })}><X className="h-3 w-3" /></Button></div>))
                             )}
                           </div>
                         </div>
@@ -1863,7 +1946,7 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
                             {contextData.offSite.communities.length === 0 ? (
                               <div className="text-xs text-muted-foreground text-center py-2 border border-dashed rounded-md cursor-pointer hover:bg-accent/50" onClick={() => updateOffSite({ communities: [...contextData.offSite.communities, { id: uuidv4(), platformType: 'Reddit', communityName: '', url: '', tags: [] }] })}>Click + to add forums</div>
                             ) : (
-                              contextData.offSite.communities.map((c: CommunityForum) => (<div key={c.id} className="flex gap-1 group text-xs"><select className="h-8 w-20 rounded border px-1 text-xs" value={c.platformType} onChange={(e) => updateOffSite({ communities: contextData.offSite.communities.map((x: CommunityForum) => x.id === c.id ? { ...x, platformType: e.target.value } : x) })}><option>Reddit</option><option>Discord</option><option>Slack</option><option>Telegram</option><option>GitHub</option><option>Other</option></select><Input className="h-8 text-xs flex-1" placeholder="Community URL" value={c.url} onChange={(e) => updateOffSite({ communities: contextData.offSite.communities.map((x: CommunityForum) => x.id === c.id ? { ...x, url: e.target.value } : x) })} /><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={() => updateOffSite({ communities: contextData.offSite.communities.filter((x: CommunityForum) => x.id !== c.id) })}><X className="h-3 w-3" /></Button></div>))
+                              contextData.offSite.communities.map((c: CommunityForum) => (<div key={c.id} className="flex gap-1 group text-xs"><select className="h-8 w-20 rounded border px-1 text-xs" value={c.platformType || ''} onChange={(e) => updateOffSite({ communities: contextData.offSite.communities.map((x: CommunityForum) => x.id === c.id ? { ...x, platformType: e.target.value } : x) })}><option>Reddit</option><option>Discord</option><option>Slack</option><option>Telegram</option><option>GitHub</option><option>Other</option></select><Input className="h-8 text-xs flex-1" placeholder="Community URL" value={c.url} onChange={(e) => updateOffSite({ communities: contextData.offSite.communities.map((x: CommunityForum) => x.id === c.id ? { ...x, url: e.target.value } : x) })} /><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={() => updateOffSite({ communities: contextData.offSite.communities.filter((x: CommunityForum) => x.id !== c.id) })}><X className="h-3 w-3" /></Button></div>))
                             )}
                           </div>
                         </div>
@@ -1874,7 +1957,7 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
                             {contextData.offSite.qaPlatforms.length === 0 ? (
                               <div className="text-xs text-muted-foreground text-center py-2 border border-dashed rounded-md cursor-pointer hover:bg-accent/50" onClick={() => updateOffSite({ qaPlatforms: [...contextData.offSite.qaPlatforms, { id: uuidv4(), platform: 'Stack Overflow', monitoringKeywords: [] }] })}>Click + to add Q&A</div>
                             ) : (
-                              contextData.offSite.qaPlatforms.map((q: QAPlatform) => (<div key={q.id} className="flex gap-1 group text-xs"><select className="h-8 w-24 rounded border px-1 text-xs" value={q.platform} onChange={(e) => updateOffSite({ qaPlatforms: contextData.offSite.qaPlatforms.map((x: QAPlatform) => x.id === q.id ? { ...x, platform: e.target.value } : x) })}><option>Stack Overflow</option><option>Quora</option><option>Reddit AMA</option><option>Other</option></select><Input className="h-8 text-xs flex-1" placeholder="Profile/Tag URL" value={(q as any).url || ''} onChange={(e) => updateOffSite({ qaPlatforms: contextData.offSite.qaPlatforms.map((x: QAPlatform) => x.id === q.id ? { ...x, url: e.target.value } as any : x) })} /><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={() => updateOffSite({ qaPlatforms: contextData.offSite.qaPlatforms.filter((x: QAPlatform) => x.id !== q.id) })}><X className="h-3 w-3" /></Button></div>))
+                              contextData.offSite.qaPlatforms.map((q: QAPlatform) => (<div key={q.id} className="flex gap-1 group text-xs"><select className="h-8 w-24 rounded border px-1 text-xs" value={q.platform || ''} onChange={(e) => updateOffSite({ qaPlatforms: contextData.offSite.qaPlatforms.map((x: QAPlatform) => x.id === q.id ? { ...x, platform: e.target.value } : x) })}><option>Stack Overflow</option><option>Quora</option><option>Reddit AMA</option><option>Other</option></select><Input className="h-8 text-xs flex-1" placeholder="Profile/Tag URL" value={(q as any).url || ''} onChange={(e) => updateOffSite({ qaPlatforms: contextData.offSite.qaPlatforms.map((x: QAPlatform) => x.id === q.id ? { ...x, url: e.target.value } as any : x) })} /><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={() => updateOffSite({ qaPlatforms: contextData.offSite.qaPlatforms.filter((x: QAPlatform) => x.id !== q.id) })}><X className="h-3 w-3" /></Button></div>))
                             )}
                           </div>
                         </div>
@@ -1885,7 +1968,7 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
                             {(contextData.offSite.professionalNetworks || []).length === 0 ? (
                               <div className="text-xs text-muted-foreground text-center py-2 border border-dashed rounded-md cursor-pointer hover:bg-accent/50" onClick={() => updateOffSite({ professionalNetworks: [...(contextData.offSite.professionalNetworks || []), { id: uuidv4(), platform: 'LinkedIn', groupName: '', url: '' }] })}>Click + to add groups</div>
                             ) : (
-                              (contextData.offSite.professionalNetworks || []).map((p: ProfessionalNetwork) => (<div key={p.id} className="flex gap-1 group text-xs"><select className="h-8 w-24 rounded border px-1 text-xs" value={p.platform} onChange={(e) => updateOffSite({ professionalNetworks: (contextData.offSite.professionalNetworks || []).map((x: ProfessionalNetwork) => x.id === p.id ? { ...x, platform: e.target.value } : x) })}><option>LinkedIn</option><option>Facebook</option><option>Slack</option><option>Other</option></select><Input className="h-8 text-xs flex-1" placeholder="Group URL" value={p.url} onChange={(e) => updateOffSite({ professionalNetworks: (contextData.offSite.professionalNetworks || []).map((x: ProfessionalNetwork) => x.id === p.id ? { ...x, url: e.target.value } : x) })} /><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={() => updateOffSite({ professionalNetworks: (contextData.offSite.professionalNetworks || []).filter((x: ProfessionalNetwork) => x.id !== p.id) })}><X className="h-3 w-3" /></Button></div>))
+                              (contextData.offSite.professionalNetworks || []).map((p: ProfessionalNetwork) => (<div key={p.id} className="flex gap-1 group text-xs"><select className="h-8 w-24 rounded border px-1 text-xs" value={p.platform || ''} onChange={(e) => updateOffSite({ professionalNetworks: (contextData.offSite.professionalNetworks || []).map((x: ProfessionalNetwork) => x.id === p.id ? { ...x, platform: e.target.value } : x) })}><option>LinkedIn</option><option>Facebook</option><option>Slack</option><option>Other</option></select><Input className="h-8 text-xs flex-1" placeholder="Group URL" value={p.url} onChange={(e) => updateOffSite({ professionalNetworks: (contextData.offSite.professionalNetworks || []).map((x: ProfessionalNetwork) => x.id === p.id ? { ...x, url: e.target.value } : x) })} /><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={() => updateOffSite({ professionalNetworks: (contextData.offSite.professionalNetworks || []).filter((x: ProfessionalNetwork) => x.id !== p.id) })}><X className="h-3 w-3" /></Button></div>))
                             )}
                           </div>
                         </div>
@@ -1904,7 +1987,7 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
                             {contextData.offSite.mediaSources.length === 0 ? (
                               <div className="text-xs text-muted-foreground text-center py-2 border border-dashed rounded-md cursor-pointer hover:bg-accent/50" onClick={() => updateOffSite({ mediaSources: [...contextData.offSite.mediaSources, { id: uuidv4(), name: '', type: 'news', url: '' }] })}>Click + to add channels</div>
                             ) : (
-                              contextData.offSite.mediaSources.map((m: MediaSource) => (<div key={m.id} className="flex gap-1 group text-xs"><select className="h-8 w-20 rounded border px-1 text-xs" value={m.type} onChange={(e) => updateOffSite({ mediaSources: contextData.offSite.mediaSources.map((x: MediaSource) => x.id === m.id ? { ...x, type: e.target.value as any } : x) })}><option value="news">News</option><option value="blog">Blog</option><option value="podcast">Podcast</option><option value="newsletter">Newsletter</option><option value="youtube">YouTube</option><option value="other">Other</option></select><Input className="h-8 text-xs flex-1" placeholder="Channel URL" value={m.url} onChange={(e) => updateOffSite({ mediaSources: contextData.offSite.mediaSources.map((x: MediaSource) => x.id === m.id ? { ...x, url: e.target.value } : x) })} /><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={() => updateOffSite({ mediaSources: contextData.offSite.mediaSources.filter((x: MediaSource) => x.id !== m.id) })}><X className="h-3 w-3" /></Button></div>))
+                              contextData.offSite.mediaSources.map((m: MediaSource) => (<div key={m.id} className="flex gap-1 group text-xs"><select className="h-8 w-20 rounded border px-1 text-xs" value={m.type || ''} onChange={(e) => updateOffSite({ mediaSources: contextData.offSite.mediaSources.map((x: MediaSource) => x.id === m.id ? { ...x, type: e.target.value as any } : x) })}><option value="news">News</option><option value="blog">Blog</option><option value="podcast">Podcast</option><option value="newsletter">Newsletter</option><option value="youtube">YouTube</option><option value="other">Other</option></select><Input className="h-8 text-xs flex-1" placeholder="Channel URL" value={m.url} onChange={(e) => updateOffSite({ mediaSources: contextData.offSite.mediaSources.map((x: MediaSource) => x.id === m.id ? { ...x, url: e.target.value } : x) })} /><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={() => updateOffSite({ mediaSources: contextData.offSite.mediaSources.filter((x: MediaSource) => x.id !== m.id) })}><X className="h-3 w-3" /></Button></div>))
                             )}
                           </div>
                         </div>
@@ -1915,7 +1998,7 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
                             {(contextData.offSite.backlinks || []).length === 0 ? (
                               <div className="text-xs text-muted-foreground text-center py-2 border border-dashed rounded-md cursor-pointer hover:bg-accent/50" onClick={() => updateOffSite({ backlinks: [...(contextData.offSite.backlinks || []), { id: uuidv4(), domain: '', type: 'editorial', doFollow: true }] })}>Click + to add coverage</div>
                             ) : (
-                              (contextData.offSite.backlinks || []).map((b: BacklinkSource) => (<div key={b.id} className="flex gap-1 group text-xs"><select className="h-8 w-20 rounded border px-1 text-xs" value={b.type} onChange={(e) => updateOffSite({ backlinks: (contextData.offSite.backlinks || []).map((x: BacklinkSource) => x.id === b.id ? { ...x, type: e.target.value as any } : x) })}><option value="editorial">Article</option><option value="feature">Feature</option><option value="interview">Interview</option><option value="guest_post">Guest Post</option><option value="review">Review</option><option value="mention">Mention</option><option value="other">Other</option></select><Input className="h-8 text-xs flex-1" placeholder="Post URL" value={b.pageUrl || b.domain} onChange={(e) => updateOffSite({ backlinks: (contextData.offSite.backlinks || []).map((x: BacklinkSource) => x.id === b.id ? { ...x, pageUrl: e.target.value, domain: e.target.value } : x) })} /><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={() => updateOffSite({ backlinks: (contextData.offSite.backlinks || []).filter((x: BacklinkSource) => x.id !== b.id) })}><X className="h-3 w-3" /></Button></div>))
+                              (contextData.offSite.backlinks || []).map((b: BacklinkSource) => (<div key={b.id} className="flex gap-1 group text-xs"><select className="h-8 w-20 rounded border px-1 text-xs" value={b.type || ''} onChange={(e) => updateOffSite({ backlinks: (contextData.offSite.backlinks || []).map((x: BacklinkSource) => x.id === b.id ? { ...x, type: e.target.value as any } : x) })}><option value="editorial">Article</option><option value="feature">Feature</option><option value="interview">Interview</option><option value="guest_post">Guest Post</option><option value="review">Review</option><option value="mention">Mention</option><option value="other">Other</option></select><Input className="h-8 text-xs flex-1" placeholder="Post URL" value={b.pageUrl || b.domain} onChange={(e) => updateOffSite({ backlinks: (contextData.offSite.backlinks || []).map((x: BacklinkSource) => x.id === b.id ? { ...x, pageUrl: e.target.value, domain: e.target.value } : x) })} /><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={() => updateOffSite({ backlinks: (contextData.offSite.backlinks || []).filter((x: BacklinkSource) => x.id !== b.id) })}><X className="h-3 w-3" /></Button></div>))
                             )}
                           </div>
                         </div>
@@ -1975,8 +2058,8 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
               </TabsContent>
 
               {/* Knowledge Tab - NotebookLM Style */}
-              <TabsContent value="knowledge" className="p-6 m-0 h-full overflow-y-auto">
-                <div className="space-y-6 pb-10">
+              <TabsContent value="knowledge" className="p-8 m-0 h-full overflow-y-auto">
+                <div className="space-y-7 pb-12">
                   {/* Header */}
                   <div className="flex items-center justify-between">
                     <div>
@@ -2033,9 +2116,9 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
                   </div>
 
                   {/* Quick Add Methods */}
-                  <div className="grid grid-cols-4 gap-4">
+                  <div className="grid grid-cols-4 gap-5">
                     {/* Link Button */}
-                    <div className="border rounded-lg p-4 bg-card/50 hover:bg-accent/30 transition-colors cursor-pointer"
+                    <div className="border rounded-xl p-5 bg-card/50 hover:bg-accent/30 transition-colors cursor-pointer"
                       onClick={() => {
                         const url = prompt('Enter URL (webpage, YouTube, GitHub, or Google Scholar):');
                         if (url) {
@@ -2069,7 +2152,7 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
                     </div>
 
                     {/* Paste Button */}
-                    <div className="border rounded-lg p-4 bg-card/50 hover:bg-accent/30 transition-colors cursor-pointer"
+                    <div className="border rounded-xl p-5 bg-card/50 hover:bg-accent/30 transition-colors cursor-pointer"
                       onClick={() => {
                         const pasteType = prompt('Paste type (plain_text / markdown / rich_text / code):');
                         if (pasteType && ['plain_text', 'markdown', 'rich_text', 'code'].includes(pasteType.toLowerCase().replace(' ', '_'))) {
@@ -2098,7 +2181,7 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
                     </div>
 
                     {/* Cloud & Notes Button */}
-                    <div className="border rounded-lg p-4 bg-card/50 hover:bg-accent/30 transition-colors cursor-pointer"
+                    <div className="border rounded-xl p-5 bg-card/50 hover:bg-accent/30 transition-colors cursor-pointer"
                       onClick={() => {
                         const service = prompt('Enter service (google_drive / onedrive / notion / obsidian):');
                         if (service && ['google_drive', 'onedrive', 'notion', 'obsidian'].includes(service.toLowerCase().replace(' ', '_'))) {
@@ -2127,7 +2210,7 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
                     </div>
 
                     {/* Saved Artifacts Button */}
-                    <div className="border rounded-lg p-4 bg-card/50 hover:bg-accent/30 transition-colors cursor-pointer opacity-60"
+                    <div className="border rounded-xl p-5 bg-card/50 hover:bg-accent/30 transition-colors cursor-pointer opacity-60"
                       title="Saved artifacts from agent research will appear here"
                     >
                       <div className="space-y-2">
@@ -2264,15 +2347,17 @@ export function ContextWizard({ open, onOpenChange, defaultTab = "onSite" }: Con
 
                 </div>
               </TabsContent>
+              </>
+              )}
             </div>
           </Tabs >
         </div >
 
         <DialogFooter className="pt-4 border-t shrink-0 px-6 py-4 bg-muted/30">
-          <Button onClick={() => onOpenChange(false)}>Save & Close</Button>
         </DialogFooter>
       </DialogContent >
     </Dialog >
+    </>
   );
 }
 

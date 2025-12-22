@@ -46,6 +46,7 @@ import {
   Upload,
   Cloud,
   Save,
+  MapIcon,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -57,6 +58,8 @@ import type { TodoItem } from "@/app/types/types";
 import { cn } from "@/lib/utils";
 import { useContextMenu } from "@/providers/ContextProvider";
 import { ContextWizard } from "@/app/components/ContextWizard";
+import { ContextEditDialog } from "@/app/components/ContextEditDialog";
+import { getSectionConfig, type SectionConfig } from "@/lib/context/section-mapping";
 
 interface LeftSidebarProps {
   todos: TodoItem[];
@@ -181,12 +184,24 @@ export const LeftSidebar = React.memo<LeftSidebarProps>(
     const { contextData, isContextEmpty, wizardOpen, setWizardOpen } = useContextMenu();
     const [defaultWizardTab, setDefaultWizardTab] = useState<"onSite" | "offSite" | "knowledge">("onSite");
     
+    // Edit dialog state
+    const [editDialogOpen, setEditDialogOpen] = useState(false);
+    const [editDialogConfig, setEditDialogConfig] = useState<SectionConfig | null>(null);
+    
     // Type assertion for compatibility
     const brandInfo = contextData.onSite.brandInfo as any;
 
     const openWizard = (tab: "onSite" | "offSite" | "knowledge") => {
       setDefaultWizardTab(tab);
       setWizardOpen(true);
+    };
+
+    const openEditDialog = (label: string) => {
+      const config = getSectionConfig(label);
+      if (config) {
+        setEditDialogConfig(config);
+        setEditDialogOpen(true);
+      }
     };
 
     // Calculate Counts
@@ -206,6 +221,11 @@ export const LeftSidebar = React.memo<LeftSidebarProps>(
       pagesResources: contextData.onSite.websiteContent?.filter((c: any) => ["documentation", "faq", "case_study"].includes(c.type) || c.url === "#page-blog").length || 0,
       pagesLegal: contextData.onSite.websiteContent?.filter((c: any) => c.type === "legal" || ["#page-privacy", "#page-changelog", "#page-status"].includes(c.url)).length || 0,
       get pages() { return this.pagesCore + this.pagesProduct + this.pagesResources + this.pagesLegal; },
+
+      // Links extracted from /api/context/all (data.json 结构)
+      sitemapUrls: contextData.onSite.websiteContent?.filter((c: any) => c.url === "#sitemap-url").length || 0,
+      headerLinks: contextData.onSite.websiteContent?.filter((c: any) => c.url === "#header-link").length || 0,
+      footerLinks: contextData.onSite.websiteContent?.filter((c: any) => c.url === "#footer-link").length || 0,
 
       landing: contextData.onSite.landingPages?.length || 0,
       blog: contextData.onSite.blogPosts?.length || 0,
@@ -317,6 +337,15 @@ export const LeftSidebar = React.memo<LeftSidebarProps>(
           onOpenChange={setWizardOpen}
           defaultTab={defaultWizardTab}
         />
+        <ContextEditDialog
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+          config={editDialogConfig}
+          onSuccess={() => {
+            // Refresh context data if needed
+            // The parent component should handle this
+          }}
+        />
 
         <div className="flex h-full flex-col p-2 pr-0">
           <div className="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-background">
@@ -358,63 +387,66 @@ export const LeftSidebar = React.memo<LeftSidebarProps>(
                     >
                       {/* Brand & Pages Column */}
                       <TreeItem label="Brand Assets" count={onSiteCounts.brand} icon={Paintbrush} level={1} onClick={() => openWizard("onSite")}>
-                        <TreeItem label="Meta Info" count={onSiteCounts.brandMeta} icon={FileText} level={2} />
-                        <TreeItem label="Logo URL" count={onSiteCounts.brandLogo} icon={LinkIcon} level={2} />
-                        <TreeItem label="Colors" count={onSiteCounts.brandColors} icon={Palette} level={2} />
-                        <TreeItem label="Typography" count={onSiteCounts.brandFonts} icon={FileText} level={2} />
-                        <TreeItem label="Tone" count={onSiteCounts.brandTone} icon={MessageSquare} level={2} />
-                        <TreeItem label="Languages" count={onSiteCounts.brandLangs} icon={Globe} level={2} />
+                        <TreeItem label="Meta Info" count={onSiteCounts.brandMeta} icon={FileText} level={2} onClick={() => openEditDialog("Meta Info")} />
+                        <TreeItem label="Logo URL" count={onSiteCounts.brandLogo} icon={LinkIcon} level={2} onClick={() => openEditDialog("Logo URL")} />
+                        <TreeItem label="Colors" count={onSiteCounts.brandColors} icon={Palette} level={2} onClick={() => openEditDialog("Colors")} />
+                        <TreeItem label="Typography" count={onSiteCounts.brandFonts} icon={FileText} level={2} onClick={() => openEditDialog("Typography")} />
+                        <TreeItem label="Tone" count={onSiteCounts.brandTone} icon={MessageSquare} level={2} onClick={() => openEditDialog("Tone")} />
+                        <TreeItem label="Languages" count={onSiteCounts.brandLangs} icon={Globe} level={2} onClick={() => openEditDialog("Languages")} />
                       </TreeItem>
 
                       <TreeItem label="Key Website Pages" count={onSiteCounts.pages} icon={Layout} level={1} onClick={() => openWizard("onSite")}>
-                        <TreeItem label="Core Pages" count={onSiteCounts.pagesCore} icon={File} level={2} />
-                        <TreeItem label="Product Pages" count={onSiteCounts.pagesProduct} icon={ShoppingBag} level={2} />
-                        <TreeItem label="Resources" count={onSiteCounts.pagesResources} icon={Book} level={2} />
-                        <TreeItem label="Legal & Updates" count={onSiteCounts.pagesLegal} icon={FileText} level={2} />
+                        <TreeItem label="Core Pages" count={onSiteCounts.pagesCore} icon={File} level={2} onClick={() => openEditDialog("Core Pages")} />
+                        <TreeItem label="Product Pages" count={onSiteCounts.pagesProduct} icon={ShoppingBag} level={2} onClick={() => openEditDialog("Product Pages")} />
+                        <TreeItem label="Resources" count={onSiteCounts.pagesResources} icon={Book} level={2} onClick={() => openEditDialog("Resources")} />
+                        <TreeItem label="Legal & Updates" count={onSiteCounts.pagesLegal} icon={FileText} level={2} onClick={() => openEditDialog("Legal & Updates")} />
+                        <TreeItem label="Sitemap URLs" count={onSiteCounts.sitemapUrls} icon={MapIcon} level={2} onClick={() => openEditDialog("Sitemap URLs")} />
+                        <TreeItem label="Header Links" count={onSiteCounts.headerLinks} icon={LinkIcon} level={2} onClick={() => openEditDialog("Header Links")} />
+                        <TreeItem label="Footer Links" count={onSiteCounts.footerLinks} icon={LinkIcon} level={2} onClick={() => openEditDialog("Footer Links")} />
                       </TreeItem>
 
-                      <TreeItem label="Landing Pages" count={onSiteCounts.landing} icon={Megaphone} level={1} onClick={() => openWizard("onSite")} />
-                      <TreeItem label="Blog & Resources" count={onSiteCounts.blog} icon={Book} level={1} onClick={() => openWizard("onSite")} />
+                      <TreeItem label="Landing Pages" count={onSiteCounts.landing} icon={Megaphone} level={1} onClick={() => openEditDialog("Landing Pages")} />
+                      <TreeItem label="Blog & Resources" count={onSiteCounts.blog} icon={Book} level={1} onClick={() => openEditDialog("Blog & Resources")} />
 
                       {/* Content Column */}
                       <TreeItem label="Hero Section" count={onSiteCounts.hero} icon={Flag} level={1} onClick={() => openWizard("onSite")}>
-                        <TreeItem label="Headline" count={onSiteCounts.heroHeadline} icon={Type} level={2} />
-                        <TreeItem label="Subheadline" count={onSiteCounts.heroSubheadline} icon={FileText} level={2} />
-                        <TreeItem label="Call to Action" count={onSiteCounts.heroCTA} icon={Layout} level={2} />
-                        <TreeItem label="Media" count={onSiteCounts.heroMedia} icon={FileText} level={2} />
-                        <TreeItem label="Metrics" count={onSiteCounts.heroMetrics} icon={TrendingUp} level={2} />
+                        <TreeItem label="Headline" count={onSiteCounts.heroHeadline} icon={Type} level={2} onClick={() => openEditDialog("Headline")} />
+                        <TreeItem label="Subheadline" count={onSiteCounts.heroSubheadline} icon={FileText} level={2} onClick={() => openEditDialog("Subheadline")} />
+                        <TreeItem label="Call to Action" count={onSiteCounts.heroCTA} icon={Layout} level={2} onClick={() => openEditDialog("Call to Action")} />
+                        <TreeItem label="Media" count={onSiteCounts.heroMedia} icon={FileText} level={2} onClick={() => openEditDialog("Media")} />
+                        <TreeItem label="Metrics" count={onSiteCounts.heroMetrics} icon={TrendingUp} level={2} onClick={() => openEditDialog("Metrics")} />
                       </TreeItem>
 
-                      <TreeItem label="Problem Statement" count={onSiteCounts.problem} icon={AlertCircle} level={1} onClick={() => openWizard("onSite")} />
-                      <TreeItem label="Who We Serve" count={onSiteCounts.audience} icon={Users} level={1} onClick={() => openWizard("onSite")} />
-                      <TreeItem label="Use Cases" count={onSiteCounts.useCases} icon={Zap} level={1} onClick={() => openWizard("onSite")} />
-                      <TreeItem label="Industries" count={onSiteCounts.industries} icon={Building} level={1} onClick={() => openWizard("onSite")} />
-                      <TreeItem label="Products & Services" count={onSiteCounts.products} icon={ShoppingBag} level={1} onClick={() => openWizard("onSite")} />
+                      <TreeItem label="Problem Statement" count={onSiteCounts.problem} icon={AlertCircle} level={1} onClick={() => openEditDialog("Problem Statement")} />
+                      <TreeItem label="Who We Serve" count={onSiteCounts.audience} icon={Users} level={1} onClick={() => openEditDialog("Who We Serve")} />
+                      <TreeItem label="Use Cases" count={onSiteCounts.useCases} icon={Zap} level={1} onClick={() => openEditDialog("Use Cases")} />
+                      <TreeItem label="Industries" count={onSiteCounts.industries} icon={Building} level={1} onClick={() => openEditDialog("Industries")} />
+                      <TreeItem label="Products & Services" count={onSiteCounts.products} icon={ShoppingBag} level={1} onClick={() => openEditDialog("Products & Services")} />
 
                       <TreeItem label="Social Proof & Trust" count={onSiteCounts.socialProof} icon={Star} level={1} onClick={() => openWizard("onSite")}>
-                        <TreeItem label="Testimonials" count={onSiteCounts.spTestimonials} icon={MessageSquare} level={2} />
-                        <TreeItem label="Case Studies" count={onSiteCounts.spCases} icon={FileText} level={2} />
-                        <TreeItem label="Badges" count={onSiteCounts.spBadges} icon={CheckCircle} level={2} />
-                        <TreeItem label="Awards" count={onSiteCounts.spAwards} icon={Star} level={2} />
-                        <TreeItem label="Guarantees" count={onSiteCounts.spGuarantees} icon={CheckCircle} level={2} />
-                        <TreeItem label="Integrations" count={onSiteCounts.spIntegrations} icon={LinkIcon} level={2} />
+                        <TreeItem label="Testimonials" count={onSiteCounts.spTestimonials} icon={MessageSquare} level={2} onClick={() => openEditDialog("Testimonials")} />
+                        <TreeItem label="Case Studies" count={onSiteCounts.spCases} icon={FileText} level={2} onClick={() => openEditDialog("Case Studies")} />
+                        <TreeItem label="Badges" count={onSiteCounts.spBadges} icon={CheckCircle} level={2} onClick={() => openEditDialog("Badges")} />
+                        <TreeItem label="Awards" count={onSiteCounts.spAwards} icon={Star} level={2} onClick={() => openEditDialog("Awards")} />
+                        <TreeItem label="Guarantees" count={onSiteCounts.spGuarantees} icon={CheckCircle} level={2} onClick={() => openEditDialog("Guarantees")} />
+                        <TreeItem label="Integrations" count={onSiteCounts.spIntegrations} icon={LinkIcon} level={2} onClick={() => openEditDialog("Integrations")} />
                       </TreeItem>
 
-                      <TreeItem label="Leadership Team" count={onSiteCounts.team} icon={Users} level={1} onClick={() => openWizard("onSite")} />
+                      <TreeItem label="Leadership Team" count={onSiteCounts.team} icon={Users} level={1} onClick={() => openEditDialog("Leadership Team")} />
 
                       <TreeItem label="About Us" count={onSiteCounts.about} icon={Info} level={1} onClick={() => openWizard("onSite")}>
-                        <TreeItem label="Company Story" count={onSiteCounts.aboutStory} icon={Book} level={2} />
-                        <TreeItem label="Mission & Vision" count={onSiteCounts.aboutMission} icon={Target} level={2} />
-                        <TreeItem label="Core Values" count={onSiteCounts.aboutValues} icon={Star} level={2} />
+                        <TreeItem label="Company Story" count={onSiteCounts.aboutStory} icon={Book} level={2} onClick={() => openEditDialog("Company Story")} />
+                        <TreeItem label="Mission & Vision" count={onSiteCounts.aboutMission} icon={Target} level={2} onClick={() => openEditDialog("Mission & Vision")} />
+                        <TreeItem label="Core Values" count={onSiteCounts.aboutValues} icon={Star} level={2} onClick={() => openEditDialog("Core Values")} />
                       </TreeItem>
 
-                      <TreeItem label="FAQ" count={onSiteCounts.faq} icon={HelpCircle} level={1} onClick={() => openWizard("onSite")} />
+                      <TreeItem label="FAQ" count={onSiteCounts.faq} icon={HelpCircle} level={1} onClick={() => openEditDialog("FAQ")} />
 
                       <TreeItem label="Contact Information" count={onSiteCounts.contact} icon={Mail} level={1} onClick={() => openWizard("onSite")}>
-                        <TreeItem label="Primary Contact" count={onSiteCounts.contactPrimary} icon={Phone} level={2} />
-                        <TreeItem label="Location & Hours" count={onSiteCounts.contactLocation} icon={MapPin} level={2} />
-                        <TreeItem label="Support Channels" count={onSiteCounts.contactSupport} icon={HelpCircle} level={2} />
-                        <TreeItem label="Additional" count={onSiteCounts.contactAdditional} icon={LayoutList} level={2} />
+                        <TreeItem label="Primary Contact" count={onSiteCounts.contactPrimary} icon={Phone} level={2} onClick={() => openEditDialog("Primary Contact")} />
+                        <TreeItem label="Location & Hours" count={onSiteCounts.contactLocation} icon={MapPin} level={2} onClick={() => openEditDialog("Location & Hours")} />
+                        <TreeItem label="Support Channels" count={onSiteCounts.contactSupport} icon={HelpCircle} level={2} onClick={() => openEditDialog("Support Channels")} />
+                        <TreeItem label="Additional" count={onSiteCounts.contactAdditional} icon={LayoutList} level={2} onClick={() => openEditDialog("Additional")} />
                       </TreeItem>
 
                     </TreeItem>
@@ -427,32 +459,32 @@ export const LeftSidebar = React.memo<LeftSidebarProps>(
                       onClick={() => openWizard("offSite")}
                     >
                       <TreeItem label="Owned Presence" count={offSiteCounts.ownedPresence} icon={Share2} level={1} onClick={() => openWizard("offSite")}>
-                        <TreeItem label="Official Channels" count={offSiteCounts.osOfficialChannels} icon={Globe} level={2} />
-                        <TreeItem label="Executive Accounts" count={offSiteCounts.osExecutiveAccounts} icon={User} level={2} />
+                        <TreeItem label="Official Channels" count={offSiteCounts.osOfficialChannels} icon={Globe} level={2} onClick={() => openEditDialog("Official Channels")} />
+                        <TreeItem label="Executive Accounts" count={offSiteCounts.osExecutiveAccounts} icon={User} level={2} onClick={() => openEditDialog("Executive Accounts")} />
                       </TreeItem>
 
                       <TreeItem label="Reviews & Listings" count={offSiteCounts.reviewsListings} icon={Star} level={1} onClick={() => openWizard("offSite")}>
-                        <TreeItem label="Reviews" count={offSiteCounts.osReviews} icon={MessageSquare} level={2} />
-                        <TreeItem label="Directories" count={offSiteCounts.osDirectories} icon={Folder} level={2} />
-                        <TreeItem label="Storefronts" count={offSiteCounts.osStorefronts} icon={ShoppingBag} level={2} />
+                        <TreeItem label="Reviews" count={offSiteCounts.osReviews} icon={MessageSquare} level={2} onClick={() => openEditDialog("Reviews")} />
+                        <TreeItem label="Directories" count={offSiteCounts.osDirectories} icon={Folder} level={2} onClick={() => openEditDialog("Directories")} />
+                        <TreeItem label="Storefronts" count={offSiteCounts.osStorefronts} icon={ShoppingBag} level={2} onClick={() => openEditDialog("Storefronts")} />
                       </TreeItem>
 
                       <TreeItem label="Community" count={offSiteCounts.community} icon={Users} level={1} onClick={() => openWizard("offSite")}>
-                        <TreeItem label="Forums" count={offSiteCounts.osForums} icon={MessageSquare} level={2} />
-                        <TreeItem label="Q&A" count={offSiteCounts.osQA} icon={HelpCircle} level={2} />
-                        <TreeItem label="Groups" count={offSiteCounts.osGroups} icon={Users} level={2} />
+                        <TreeItem label="Forums" count={offSiteCounts.osForums} icon={MessageSquare} level={2} onClick={() => openEditDialog("Forums")} />
+                        <TreeItem label="Q&A" count={offSiteCounts.osQA} icon={HelpCircle} level={2} onClick={() => openEditDialog("Q&A")} />
+                        <TreeItem label="Groups" count={offSiteCounts.osGroups} icon={Users} level={2} onClick={() => openEditDialog("Groups")} />
                       </TreeItem>
 
                       <TreeItem label="Media" count={offSiteCounts.media} icon={Newspaper} level={1} onClick={() => openWizard("offSite")}>
-                        <TreeItem label="Channels" count={offSiteCounts.osMediaChannels} icon={Megaphone} level={2} />
-                        <TreeItem label="Coverage" count={offSiteCounts.osCoverage} icon={FileText} level={2} />
-                        <TreeItem label="Events" count={offSiteCounts.osEvents} icon={Briefcase} level={2} />
+                        <TreeItem label="Channels" count={offSiteCounts.osMediaChannels} icon={Megaphone} level={2} onClick={() => openEditDialog("Channels")} />
+                        <TreeItem label="Coverage" count={offSiteCounts.osCoverage} icon={FileText} level={2} onClick={() => openEditDialog("Coverage")} />
+                        <TreeItem label="Events" count={offSiteCounts.osEvents} icon={Briefcase} level={2} onClick={() => openEditDialog("Events")} />
                       </TreeItem>
 
                       <TreeItem label="KOLs" count={offSiteCounts.kols} icon={Target} level={1} onClick={() => openWizard("offSite")}>
-                        <TreeItem label="Creators" count={offSiteCounts.osCreators} icon={Users} level={2} />
-                        <TreeItem label="Experts" count={offSiteCounts.osExperts} icon={User} level={2} />
-                        <TreeItem label="Press" count={offSiteCounts.osPress} icon={Newspaper} level={2} />
+                        <TreeItem label="Creators" count={offSiteCounts.osCreators} icon={Users} level={2} onClick={() => openEditDialog("Creators")} />
+                        <TreeItem label="Experts" count={offSiteCounts.osExperts} icon={User} level={2} onClick={() => openEditDialog("Experts")} />
+                        <TreeItem label="Press" count={offSiteCounts.osPress} icon={Newspaper} level={2} onClick={() => openEditDialog("Press")} />
                       </TreeItem>
                     </TreeItem>
 
@@ -496,18 +528,18 @@ export const LeftSidebar = React.memo<LeftSidebarProps>(
                           )}
                 </div>
 
-                <div className="flex-1 min-h-0 overflow-hidden">
+                <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
                   {displayTodos.length === 0 ? (
                     <div className="flex h-full items-center justify-center px-4 pb-4">
                       <p className="text-xs text-muted-foreground">
                         No tasks created yet
                       </p>
-                  </div>
+                    </div>
                   ) : (
                     <ScrollArea className="h-full px-4 py-2">
                       <div className="space-y-1.5">
                         {displayTodos.map((todo, index) => (
-                      <div
+                          <div
                             key={`${todo.id}_${index}`}
                             className={cn(
                               "flex items-start gap-2 rounded-md p-2 text-sm transition-colors cursor-default",
@@ -527,18 +559,18 @@ export const LeftSidebar = React.memo<LeftSidebarProps>(
                                 todo.status === "completed" && "line-through text-muted-foreground"
                               )}
                             >
-                          {todo.content}
-                        </span>
+                              {todo.content}
+                            </span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
                     </ScrollArea>
                   )}
                 </div>
               </ResizablePanel>
             </ResizablePanelGroup>
-            </div>
-        </div >
+          </div>
+        </div>
     </>
   );
   }

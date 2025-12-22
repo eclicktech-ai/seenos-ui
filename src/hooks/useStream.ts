@@ -94,7 +94,18 @@ type StreamAction =
   | { type: 'TOOL_CALL_START'; toolCall: ToolCall; messageId?: string }
   | { type: 'TOOL_CALL_END'; toolCallId: string; result: unknown; status: ToolCall['status']; endedAt?: string; durationMs?: number; error?: string }
   | { type: 'TODOS_UPDATE'; todos: TodoItem[] }
-  | { type: 'FILE_OPERATION'; operation: string; path: string; content?: string; language?: string; editable?: boolean; oldContent?: string }
+  | {
+      type: 'FILE_OPERATION';
+      operation: string;
+      path: string;
+      content?: string;
+      language?: string;
+      editable?: boolean;
+      toolCallId?: string;
+      lineStart?: number;
+      lineEnd?: number;
+      oldContent?: string;
+    }
   | { type: 'SET_INTERRUPT'; interrupt: InterruptData | null };
 
 // ============ Reducer ============
@@ -549,6 +560,8 @@ function streamReducer(state: StreamState, action: StreamAction): StreamState {
           content: action.content || '',
           language: action.language || 'text',
           editable: action.editable ?? true,
+          lineStart: action.lineStart,
+          lineEnd: action.lineEnd,
           oldContent: action.oldContent,
         };
       }
@@ -679,10 +692,13 @@ export function useStream(options: UseStreamOptions) {
             name: string;
             type?: string;
             status: string;
+            args?: Record<string, unknown>;
+            result?: unknown;
             argsPreview?: string;
             resultPreview?: string;
             durationMs?: number;
             subagentName?: string;
+            targetSubagent?: string;
           }>;
           metadata?: {
             contentType?: string;
@@ -714,10 +730,12 @@ export function useStream(options: UseStreamOptions) {
               id: tc.id,
               name: tc.name,
               type: tc.type as ToolCall['type'],
-              args: {},
+              args: tc.args || {},
+              result: tc.result,
               status: tc.status as ToolCall['status'],
               durationMs: tc.durationMs,
               subagentName: tc.subagentName,
+              targetSubagent: tc.targetSubagent,
             })),
             metadata: data.metadata as Message['metadata'],
           };
@@ -737,25 +755,38 @@ export function useStream(options: UseStreamOptions) {
 
       // 工具调用开始
       case 'tool_call_start': {
-        const data = event.data as ToolCallStartEventData & {
-          toolType?: 'tool' | 'subagent';
-          subagentName?: string;
-          targetSubagent?: string;
-        };
+        const data = event.data as ToolCallStartEventData;
+
+        // FRONTEND_API_GUIDE.md: data.toolCall = { id, name, type: 'function' | 'subagent', arguments, startedAt }
+        const nested = (data as { toolCall?: { id: string; name: string; type: 'function' | 'subagent'; arguments?: Record<string, unknown>; startedAt?: string } }).toolCall;
+
+        const toolCallId =
+          nested?.id ||
+          (data as { toolCallId?: string }).toolCallId ||
+          `tool-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const toolName = nested?.name || (data as { toolName?: string }).toolName || 'unknown_tool';
+
+        // 事件里 toolCall.type 为 'function'|'subagent'，而消息里 ToolCall.type 为 'tool'|'subagent'
+        const rawType = nested?.type || (data as { toolType?: 'tool' | 'subagent'; type?: 'function' | 'subagent' }).toolType || (data as { type?: 'function' | 'subagent' }).type;
+        const toolType: ToolCall['type'] =
+          rawType === 'subagent' ? 'subagent' : 'tool';
+
+        const args = nested?.arguments || (data as { args?: Record<string, unknown> }).args || {};
+
         const toolCall: ToolCall = {
-          id: data.toolCallId,
-          name: data.toolName,
-          type: data.toolType || data.type || 'tool',
-          args: data.args || {},
+          id: toolCallId,
+          name: toolName,
+          type: toolType,
+          args,
           status: 'running',
-          startedAt: data.startedAt,
-          subagentName: data.subagentName,
-          targetSubagent: data.targetSubagent,
+          startedAt: nested?.startedAt || (data as { startedAt?: string }).startedAt,
+          subagentName: (data as { subagentName?: string }).subagentName,
+          targetSubagent: (data as { targetSubagent?: string }).targetSubagent,
         };
         dispatch({
           type: 'TOOL_CALL_START',
           toolCall,
-          messageId: data.messageId || currentMessageIdRef.current || undefined,
+          messageId: (data as { messageId?: string }).messageId || currentMessageIdRef.current || undefined,
         });
         break;
       }
@@ -803,29 +834,35 @@ export function useStream(options: UseStreamOptions) {
 
       // 子代理结束
       case 'subagent_end': {
-        const data = event.data as {
+        const _data = event.data as {
           messageId: string;
           subagentName: string;
           status: 'success' | 'error';
         };
         // 查找对应的子代理工具调用并更新状态
         // 注意：这里简化处理，实际可能需要更精确的匹配
+        // TODO: 实现子代理结束时的工具调用状态更新
         break;
       }
 
       // Todos 更新 - 兼容 todos_update 和 todos_updated
       case 'todos_update':
       case 'todos_updated': {
-        const data = event.data as { 
+        const data = event.data as {
           messageId?: string;
-          todos?: TodoItem[] | { items?: TodoItem[] };
+          // FRONTEND_API_GUIDE.md: todos: { items, summary }
+          todos?: { items?: TodoItem[]; summary?: unknown } | TodoItem[];
+          // 兼容：直接 items/summary 顶层
+          items?: TodoItem[];
           summary?: unknown;
         };
-        // 支持两种格式：直接数组或 { items: [...] }
-        const todos = Array.isArray(data.todos) 
-          ? data.todos 
-          : (data.todos as { items?: TodoItem[] })?.items;
-        if (todos) {
+
+        const todos =
+          Array.isArray(data.todos)
+            ? data.todos
+            : data.todos?.items || data.items;
+
+        if (todos && Array.isArray(todos)) {
           dispatch({ type: 'TODOS_UPDATE', todos });
         }
         break;
@@ -841,6 +878,9 @@ export function useStream(options: UseStreamOptions) {
           content: data.content,
           language: data.language,
           editable: data.editable,
+          toolCallId: data.toolCallId,
+          lineStart: data.lineStart,
+          lineEnd: data.lineEnd,
           oldContent: data.oldContent,
         });
         callbacksRef.current.onFileOperation?.(data);
@@ -1077,7 +1117,6 @@ export function useStream(options: UseStreamOptions) {
         }
       } else {
         // 正在连接中（connecting 或 reconnecting），断开并重新连接到新 cid
-        console.log('[useStream] WebSocket state:', wsRef.current.state, ', reconnecting to:', newCid);
         wsRef.current.reconnect(newCid);
       }
     } else {

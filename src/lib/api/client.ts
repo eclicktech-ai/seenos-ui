@@ -244,9 +244,10 @@ class ApiClient {
   setToken(token: string | null): void {
     this.token = token;
     if (token) {
-      localStorage.setItem('seenos_token', token);
+      // Use the same key as AuthProvider
+      localStorage.setItem('deep_agents_token', token);
     } else {
-      localStorage.removeItem('seenos_token');
+      localStorage.removeItem('deep_agents_token');
     }
   }
 
@@ -258,7 +259,8 @@ class ApiClient {
   /** 从 localStorage 加载 token */
   loadToken(): void {
     if (typeof window !== 'undefined') {
-      this.token = localStorage.getItem('seenos_token');
+      // Use the same key as AuthProvider
+      this.token = localStorage.getItem('deep_agents_token');
     }
   }
 
@@ -266,7 +268,11 @@ class ApiClient {
   clearToken(): void {
     this.token = null;
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('seenos_token');
+      // Use the same key as AuthProvider
+      localStorage.removeItem('deep_agents_token');
+      // Also clear user and settings to force AuthProvider to re-initialize
+      localStorage.removeItem('deep_agents_user');
+      localStorage.removeItem('deep_agents_settings');
     }
   }
 
@@ -303,9 +309,9 @@ class ApiClient {
       // Token 过期处理
       if (response.status === 401) {
         this.clearToken();
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login';
-        }
+        // Don't use window.location.href - it causes page reload loops
+        // Let AuthProvider and React Router handle navigation
+        console.warn('[ApiClient] 401 Unauthorized - token cleared');
       }
 
       let errorData: { error?: { code?: string; message?: string }; message?: string; detail?: string } = {};
@@ -327,6 +333,11 @@ class ApiClient {
       return response.json();
     }
     return {} as T;
+  }
+
+  /** 是否为 404 Not Found（用于新旧端点回退） */
+  private isNotFoundError(error: unknown): boolean {
+    return typeof error === 'object' && error !== null && (error as ApiError).status === 404;
   }
 
   /** GET 请求 */
@@ -590,9 +601,43 @@ class ApiClient {
 
   // ============ Context API (RAG) ============
 
-  /** 获取用户上下文文件列表 */
+  /** 获取用户上下文文件列表 - 从 /api/context/all 中提取文件信息 */
   async getContextFiles(): Promise<ContextListResponse> {
-    return this.get<ContextListResponse>('/context');
+    // 优先使用 FRONTEND_API_GUIDE.md 的新端点：GET /context
+    try {
+      return await this.get<ContextListResponse>('/context');
+    } catch (error) {
+      // 旧后端没有该端点时，回退到 /context/all 的解析逻辑
+      if (!this.isNotFoundError(error)) throw error;
+    }
+
+    // 回退：从 /context/all 获取所有数据，然后提取 knowledge 部分的文件信息
+    const allData = await this.getContextAll();
+    const knowledge = allData?.knowledge || {};
+    const sources = knowledge.sources || [];
+
+    // 过滤出文件类型的 sources（根据 by_type 中的 file 类型，或 source.type === 'file'）
+    const fileSources = sources.filter((source: any) => {
+      if (source.type === 'file' || source.sourceType === 'file') return true;
+      if (source.fileType) return true;
+      return false;
+    });
+
+    const contexts: ContextFile[] = fileSources.map((source: any) => ({
+      id: source.id || source.contextId || '',
+      filename: source.filename || source.name || source.title || '',
+      fileType: (source.fileType || source.sourceType || 'txt') as 'txt' | 'md' | 'pdf' | 'docx',
+      fileSize: source.fileSize || 0,
+      chunkCount: source.chunkCount || 0,
+      status: (source.status || 'ready') as 'pending' | 'processing' | 'ready' | 'error',
+      errorMessage: source.errorMessage || undefined,
+      createdAt: source.createdAt || source.created_at || source.addedAt || new Date().toISOString(),
+    }));
+
+    const totalSize = contexts.reduce((sum, file) => sum + file.fileSize, 0);
+    const maxSize = knowledge.maxSize || 50 * 1024 * 1024; // 默认 50MB
+
+    return { contexts, totalSize, maxSize };
   }
 
   /** 上传上下文文件 */
@@ -603,13 +648,26 @@ class ApiClient {
       formData.append('filename', filename);
     }
 
-    const response = await fetch(`${this.baseUrl}/context/upload`, {
+    const headers: HeadersInit = {};
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
+
+    // 优先新端点：POST /context/upload（FRONTEND_API_GUIDE.md）
+    let response = await fetch(`${this.baseUrl}/context/upload`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.token}`,
-      },
+      headers,
       body: formData,
     });
+
+    // 旧端点回退：POST /context/files/upload
+    if (response.status === 404) {
+      response = await fetch(`${this.baseUrl}/context/files/upload`, {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+    }
 
     if (!response.ok) {
       let errorData: { error?: { code?: string; message?: string }; message?: string; detail?: string } = {};
@@ -630,26 +688,51 @@ class ApiClient {
 
   /** 删除上下文文件 */
   async deleteContextFile(contextId: string): Promise<void> {
-    return this.delete(`/context/${contextId}`);
+    try {
+      // 新端点：DELETE /context/{id}
+      return await this.delete(`/context/${contextId}`);
+    } catch (error) {
+      if (!this.isNotFoundError(error)) throw error;
+      // 旧端点回退
+      return this.delete(`/context/files/${contextId}`);
+    }
   }
 
   /** 获取文件内容 */
   async getContextFileContent(contextId: string): Promise<ContextContentResponse> {
-    return this.get<ContextContentResponse>(`/context/${contextId}/content`);
+    try {
+      // 新端点：GET /context/{id}/content
+      return await this.get<ContextContentResponse>(`/context/${contextId}/content`);
+    } catch (error) {
+      if (!this.isNotFoundError(error)) throw error;
+      return this.get<ContextContentResponse>(`/context/files/${contextId}/content`);
+    }
   }
 
   /** 获取文件分块 */
   async getContextFileChunks(contextId: string): Promise<ContextChunksResponse> {
-    return this.get<ContextChunksResponse>(`/context/${contextId}/chunks`);
+    try {
+      // 新端点：GET /context/{id}/chunks
+      return await this.get<ContextChunksResponse>(`/context/${contextId}/chunks`);
+    } catch (error) {
+      if (!this.isNotFoundError(error)) throw error;
+      return this.get<ContextChunksResponse>(`/context/files/${contextId}/chunks`);
+    }
   }
 
   /** 下载原始文件 */
   async downloadContextFile(contextId: string, filename: string): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/context/${contextId}/download`, {
-      headers: {
-        'Authorization': `Bearer ${this.token}`,
-      },
-    });
+    const headers: HeadersInit = {};
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
+
+    // 优先新端点：GET /context/{id}/download
+    let response = await fetch(`${this.baseUrl}/context/${contextId}/download`, { headers });
+    // 旧端点回退：GET /context/files/{id}/download
+    if (response.status === 404) {
+      response = await fetch(`${this.baseUrl}/context/files/${contextId}/download`, { headers });
+    }
 
     if (!response.ok) {
       throw new Error(`Failed to download file: ${response.status}`);
@@ -673,10 +756,267 @@ class ApiClient {
     top_k?: number;
     similarity_threshold?: number;
   }): Promise<{ results: ContextSearchResult[] }> {
-    return this.post<{ results: ContextSearchResult[] }>('/context/search', {
-      query,
-      ...options,
+    try {
+      // 新端点：POST /context/search
+      return await this.post<{ results: ContextSearchResult[] }>('/context/search', {
+        query,
+        ...options,
+      });
+    } catch (error) {
+      if (!this.isNotFoundError(error)) throw error;
+      // 旧端点回退：POST /context/files/search
+      return this.post<{ results: ContextSearchResult[] }>('/context/files/search', {
+        query,
+        ...options,
+      });
+    }
+  }
+
+  /** 获取所有 Context 数据 */
+  async getContextAll(): Promise<any> {
+    return this.get<any>('/context/all');
+  }
+
+  /** 获取 Context 统计数据 */
+  async getContextStats(useCache: boolean = true): Promise<ContextStatsResponse> {
+    return this.get<ContextStatsResponse>('/context/stats', { use_cache: useCache.toString() });
+  }
+
+  // ============ Singleton 操作 ============
+
+  /** 获取 Singleton */
+  async getSingleton(section: string): Promise<ContextSingleton> {
+    return this.get<ContextSingleton>(`/context/singletons/${section}`);
+  }
+
+  /** 创建/更新 Singleton (Upsert) */
+  async upsertSingleton(section: string, data: any, expectedVersion?: number): Promise<ContextSingleton> {
+    const body: any = { data };
+    if (expectedVersion !== undefined) {
+      body.expected_version = expectedVersion;
+    }
+    return this.put<ContextSingleton>(`/context/singletons/${section}`, body);
+  }
+
+  /** 删除 Singleton */
+  async deleteSingleton(section: string): Promise<void> {
+    return this.delete(`/context/singletons/${section}`);
+  }
+
+  // ============ Items 操作 ============
+
+  /** 获取 Items 列表 */
+  async getItems(params?: {
+    category?: 'onsite' | 'offsite';
+    section?: string;
+    limit?: number;
+    offset?: number;
+    include_deleted?: boolean;
+  }): Promise<ContextItemsResponse> {
+    const queryParams: Record<string, string> = {};
+    if (params?.category) queryParams.category = params.category;
+    if (params?.section) queryParams.section = params.section;
+    if (params?.limit !== undefined) queryParams.limit = params.limit.toString();
+    if (params?.offset !== undefined) queryParams.offset = params.offset.toString();
+    if (params?.include_deleted !== undefined) queryParams.include_deleted = params.include_deleted.toString();
+    return this.get<ContextItemsResponse>('/context/items', Object.keys(queryParams).length > 0 ? queryParams : undefined);
+  }
+
+  /** 获取单个 Item */
+  async getItem(itemId: string): Promise<ContextItem> {
+    return this.get<ContextItem>(`/context/items/${itemId}`);
+  }
+
+  /** 创建 Item */
+  async createItem(data: ContextItemCreate): Promise<ContextItem> {
+    return this.post<ContextItem>('/context/items', data);
+  }
+
+  /** 更新 Item */
+  async updateItem(itemId: string, data: Partial<ContextItemCreate>, expectedVersion?: number): Promise<ContextItem> {
+    const body: any = { ...data };
+    if (expectedVersion !== undefined) {
+      body.expected_version = expectedVersion;
+    }
+    return this.put<ContextItem>(`/context/items/${itemId}`, body);
+  }
+
+  /** 删除 Item */
+  async deleteItem(itemId: string): Promise<void> {
+    return this.delete(`/context/items/${itemId}`);
+  }
+
+  /** 恢复 Item */
+  async restoreItem(itemId: string): Promise<ContextItem> {
+    return this.post<ContextItem>(`/context/items/${itemId}/restore`);
+  }
+
+  /** 批量删除 Items */
+  async bulkDeleteItems(ids: string[]): Promise<{ deleted: number; failed: string[] }> {
+    return this.post<{ deleted: number; failed: string[] }>('/context/items/bulk-delete', { ids });
+  }
+
+  /** 重新排序 Items */
+  async reorderItems(category: 'onsite' | 'offsite', section: string, ids: string[]): Promise<void> {
+    return this.post('/context/items/reorder', { category, section, ids });
+  }
+
+  // ============ Persons 操作 ============
+
+  /** 获取 Persons 列表 */
+  async getPersons(params?: {
+    category?: 'onsite' | 'offsite';
+    section?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ContextPersonsResponse> {
+    const queryParams: Record<string, string> = {};
+    if (params?.category) queryParams.category = params.category;
+    if (params?.section) queryParams.section = params.section;
+    if (params?.limit !== undefined) queryParams.limit = params.limit.toString();
+    if (params?.offset !== undefined) queryParams.offset = params.offset.toString();
+    return this.get<ContextPersonsResponse>('/context/persons', Object.keys(queryParams).length > 0 ? queryParams : undefined);
+  }
+
+  /** 创建 Person */
+  async createPerson(data: ContextPersonCreate): Promise<ContextPerson> {
+    return this.post<ContextPerson>('/context/persons', data);
+  }
+
+  /** 更新 Person */
+  async updatePerson(personId: string, data: Partial<ContextPersonCreate>, expectedVersion?: number): Promise<ContextPerson> {
+    const body: any = { ...data };
+    if (expectedVersion !== undefined) {
+      body.expected_version = expectedVersion;
+    }
+    return this.put<ContextPerson>(`/context/persons/${personId}`, body);
+  }
+
+  /** 删除 Person */
+  async deletePerson(personId: string): Promise<void> {
+    return this.delete(`/context/persons/${personId}`);
+  }
+
+  // ============ Entities 操作 ============
+
+  /** 获取 Entities 列表 */
+  async getEntities(params?: {
+    category?: 'onsite' | 'offsite';
+    section?: string;
+    limit?: number;
+    offset?: number;
+    include_deleted?: boolean;
+  }): Promise<ContextEntitiesResponse> {
+    const queryParams: Record<string, string> = {};
+    if (params?.category) queryParams.category = params.category;
+    if (params?.section) queryParams.section = params.section;
+    if (params?.limit !== undefined) queryParams.limit = params.limit.toString();
+    if (params?.offset !== undefined) queryParams.offset = params.offset.toString();
+    if (params?.include_deleted !== undefined) queryParams.include_deleted = params.include_deleted.toString();
+    return this.get<ContextEntitiesResponse>('/context/entities', Object.keys(queryParams).length > 0 ? queryParams : undefined);
+  }
+
+  /** 创建 Entity */
+  async createEntity(data: ContextEntityCreate): Promise<ContextEntity> {
+    return this.post<ContextEntity>('/context/entities', data);
+  }
+
+  /** 更新 Entity */
+  async updateEntity(entityId: string, data: Partial<ContextEntityCreate>, expectedVersion?: number): Promise<ContextEntity> {
+    const body: any = { ...data };
+    if (expectedVersion !== undefined) {
+      body.expected_version = expectedVersion;
+    }
+    return this.put<ContextEntity>(`/context/entities/${entityId}`, body);
+  }
+
+  /** 删除 Entity */
+  async deleteEntity(entityId: string): Promise<void> {
+    return this.delete(`/context/entities/${entityId}`);
+  }
+
+  // ============ Onboarding API ============
+
+  /** 获取 Onboarding 状态 */
+  async getOnboardingStatus(): Promise<OnboardingStatus> {
+    const response = await this.get<any>('/onboarding/status');
+    
+    // 转换字段名：从下划线格式转换为驼峰格式
+    return {
+      status: response.status,
+      currentStep: response.current_step,
+      completedSteps: response.completed_steps || [],
+      message: response.message,
+      navigationStats: response.navigation_stats,
+      error: response.error,
+      researchInteractionId: response.research_interaction_id,
+      researchStatus: response.research_status,
+      researchUrl: response.research_url,
+      researchData: response.research_data,
+      startedAt: response.started_at,
+      completedAt: response.completed_at,
+      lastUpdatedAt: response.last_updated_at,
+    } as OnboardingStatus;
+  }
+
+  /** 启动 Deep Research（品牌分析） */
+  async startDeepResearch(
+    url: string,
+    options?: {
+      stage?: 'onsite' | 'offsite' | 'both';
+      onsite_mode?: 'search' | 'deep' | 'hybrid';
+      offsite_mode?: 'search' | 'deep' | 'hybrid';
+    }
+  ): Promise<DeepResearchResponse> {
+    return this.post<DeepResearchResponse>('/onboarding/research', {
+      url,
+      ...(options || {}),
     });
+  }
+
+  /** 获取 Deep Research 结果 */
+  async getDeepResearchResult(interactionId: string): Promise<DeepResearchResult> {
+    return this.get<DeepResearchResult>(`/onboarding/research/${interactionId}`);
+  }
+
+  /** 搜索品牌数据 */
+  async searchOnboardingData(query?: string, scope: 'all' | 'onsite' | 'offsite' = 'all'): Promise<OnboardingSearchResponse> {
+    const params: Record<string, string> = {};
+    if (query) params.query = query;
+    params.scope = scope;
+    return this.get<OnboardingSearchResponse>('/onboarding/search', params);
+  }
+
+  /** 获取品牌摘要 */
+  async getOnboardingSummary(): Promise<OnboardingSummary> {
+    return this.get<OnboardingSummary>('/onboarding/summary');
+  }
+
+  // ============ Projects API ============
+
+  /** 获取项目列表 */
+  async getProjects(): Promise<ProjectListResponse> {
+    return this.get<ProjectListResponse>('/projects');
+  }
+
+  /** 创建项目 */
+  async createProject(data: CreateProjectRequest): Promise<Project> {
+    return this.post<Project>('/projects', data);
+  }
+
+  /** 获取项目详情 */
+  async getProject(projectId: string): Promise<Project> {
+    return this.get<Project>(`/projects/${projectId}`);
+  }
+
+  /** 更新项目 */
+  async updateProject(projectId: string, data: UpdateProjectRequest): Promise<Project> {
+    return this.put<Project>(`/projects/${projectId}`, data);
+  }
+
+  /** 验证项目 URL */
+  async validateProjectUrl(url: string): Promise<ValidateUrlResponse> {
+    return this.post<ValidateUrlResponse>('/projects/validate-url', { url });
   }
 }
 
@@ -730,6 +1070,351 @@ export interface ContextChunksResponse {
   filename: string;
   chunkCount: number;
   chunks: ContextChunk[];
+}
+
+// ============ Context API 类型定义 ============
+
+/** Context 统计数据响应 */
+export interface ContextStatsResponse {
+  onsite: {
+    total: number;
+    sections: Record<string, { count: number; has_data: boolean }>;
+  };
+  offsite: {
+    total: number;
+    sections: Record<string, { count: number; has_data: boolean }>;
+  };
+  knowledge: {
+    total: number;
+    sections: Record<string, { count: number; has_data: boolean }>;
+  };
+}
+
+/** Singleton 响应 */
+export interface ContextSingleton {
+  user_id: string;
+  section: string;
+  data: Record<string, any>;
+  version: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+/** Item 响应 */
+export interface ContextItem {
+  id: string;
+  user_id: string;
+  category: 'onsite' | 'offsite';
+  section: string;
+  title: string | null;
+  description: string | null;
+  url: string | null;
+  image_url: string | null;
+  notes: string | null;
+  extra: Record<string, any>;
+  sequence: number;
+  version: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+/** Items 列表响应 */
+export interface ContextItemsResponse {
+  items: ContextItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
+/** Item 创建请求 */
+export interface ContextItemCreate {
+  category: 'onsite' | 'offsite';
+  section: string;
+  title?: string | null;
+  description?: string | null;
+  url?: string | null;
+  image_url?: string | null;
+  notes?: string | null;
+  extra?: Record<string, any>;
+}
+
+/** Person 响应 */
+export interface ContextPerson {
+  id: string;
+  user_id: string;
+  category: 'onsite' | 'offsite';
+  section: string;
+  name: string;
+  title: string | null;
+  bio: string | null;
+  photo_url: string | null;
+  platform: string | null;
+  handle: string | null;
+  url: string | null;
+  role: string | null;
+  social_links: Array<{ platform: string; url: string }>;
+  notes: string | null;
+  extra: Record<string, any>;
+  sequence: number;
+  version: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+/** Persons 列表响应 */
+export interface ContextPersonsResponse {
+  items: ContextPerson[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
+/** Person 创建请求 */
+export interface ContextPersonCreate {
+  category: 'onsite' | 'offsite';
+  section: string;
+  name: string;
+  title?: string | null;
+  bio?: string | null;
+  photo_url?: string | null;
+  platform?: string | null;
+  handle?: string | null;
+  url?: string | null;
+  role?: string | null;
+  social_links?: Array<{ platform: string; url: string }>;
+  notes?: string | null;
+  extra?: Record<string, any>;
+}
+
+/** Entity 响应 */
+export interface ContextEntity {
+  id: string;
+  user_id: string;
+  category: 'onsite' | 'offsite';
+  section: string;
+  name: string;
+  platform: string | null;
+  handle: string | null;
+  url: string | null;
+  entity_type: string | null;
+  event_date: string | null;
+  location: string | null;
+  notes: string | null;
+  extra: Record<string, any>;
+  sequence: number;
+  version: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+/** Entities 列表响应 */
+export interface ContextEntitiesResponse {
+  items: ContextEntity[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
+/** Entity 创建请求 */
+export interface ContextEntityCreate {
+  category: 'onsite' | 'offsite';
+  section: string;
+  name: string;
+  platform?: string | null;
+  handle?: string | null;
+  url?: string | null;
+  entity_type?: string | null;
+  event_date?: string | null;
+  location?: string | null;
+  notes?: string | null;
+  extra?: Record<string, any>;
+}
+
+// ============ Onboarding 类型定义 ============
+
+/** Onboarding 状态类型 */
+export type OnboardingStatusType = 'not_started' | 'in_progress' | 'researching' | 'completed' | 'failed';
+
+/** Onboarding 状态 */
+export interface OnboardingStatus {
+  status: OnboardingStatusType;
+  currentStep?: string;
+  completedSteps: string[];
+  message?: string;
+  navigationStats?: {
+    sitemapTotal: number;
+    sitemapFiltered: number;
+    headerLinks: number;
+    footerLinks: number;
+    [key: string]: any;
+  };
+  error?: string;
+  researchInteractionId?: string;
+  researchStatus?: 'pending' | 'running' | 'completed' | 'failed';
+  researchUrl?: string;
+  researchData?: ContextExtractionData;
+  startedAt?: string;
+  completedAt?: string;
+  lastUpdatedAt?: string;
+}
+
+/** 结构化数据 */
+export interface ContextExtractionData {
+  onsite?: OnsiteData;
+  offsite?: OffsiteData;
+}
+
+/** Onsite 数据 */
+export interface OnsiteData {
+  brandAssets?: BrandAssets;
+  heroSection?: HeroSection;
+  problemStatement?: { painPoints: Array<{ title: string; description?: string }> };
+  whoWeServe?: { targetAudiences: Array<{ name: string; description?: string }> };
+  useCases?: Array<{ title: string; description?: string }>;
+  industries?: Array<{ title: string; description?: string }>;
+  productsAndServices?: Array<{ title: string; description?: string; url?: string }>;
+  features?: Array<{ title: string; description?: string }>;
+  trustBadges?: Array<{ title: string; description?: string; imageUrl?: string }>;
+  caseStudies?: Array<{ title: string; customerName?: string; industry?: string }>;
+  testimonials?: Array<{ quote: string; author?: string; title?: string; company?: string }>;
+  leadershipTeam?: Array<{ name: string; title?: string; bio?: string; photoUrl?: string }>;
+  aboutUs?: { companyStory?: string; mission?: string; vision?: string; coreValues?: string[] };
+  faqs?: Array<{ question: string; answer: string; category?: string }>;
+  contactInfo?: { email?: string; phone?: string; address?: string; socialLinks?: Record<string, string> };
+}
+
+/** Offsite 数据 */
+export interface OffsiteData {
+  monitoringScope?: { brandKeywords?: string[]; productKeywords?: string[]; hashtags?: string[] };
+  targetKeywords?: Array<{ keyword: string; description?: string }>;
+  competitors?: Array<{ name: string; url?: string; competitorType?: string; notes?: string }>;
+  socialProfiles?: Array<{ name: string; platform: string; handle?: string; url?: string }>;
+  reviewPlatforms?: Array<{ name: string; platform: string; url?: string; rating?: number }>;
+  communityForums?: Array<{ name: string; platform: string; url?: string }>;
+  mediaOutlets?: Array<{ name: string; url?: string; mediaType?: string }>;
+  pressCoverage?: Array<{ title: string; publication: string; url?: string }>;
+  kols?: Array<{ name: string; platform?: string; handle?: string; role?: string }>;
+}
+
+/** 品牌资产 */
+export interface BrandAssets {
+  brandName: { name: string; subtitle?: string };
+  metaDescription?: string;
+  logoUrl?: string;
+  brandColors?: { primary?: string; secondary?: string };
+  toneOfVoice?: string;
+}
+
+/** Hero 区 */
+export interface HeroSection {
+  headline: string;
+  subheadline?: string;
+  ctas?: Array<{ text: string; url?: string; style?: string }>;
+  metrics?: Array<{ label: string; value: string }>;
+}
+
+/** Deep Research 响应 */
+export interface DeepResearchResponse {
+  interactionId: string;
+  status: string;
+  message?: string;
+  stage?: 'onsite' | 'offsite' | 'both' | string;
+}
+
+/** Deep Research 结果 */
+export interface DeepResearchResult {
+  interactionId: string;
+  status: string;
+  onsite?: OnsiteData;
+  offsite?: OffsiteData;
+  citations: Array<{ title: string; url: string; snippet?: string }>;
+  error?: string;
+}
+
+/** Onboarding 搜索结果 */
+export interface OnboardingSearchResult {
+  id: string;
+  type: 'singleton' | 'item' | 'person' | 'entity';
+  category: string;
+  section: string;
+  title?: string;
+  description?: string;
+  data: Record<string, any>;
+  relevance: number;
+}
+
+/** Onboarding 搜索响应 */
+export interface OnboardingSearchResponse {
+  status: OnboardingStatus;
+  query?: string;
+  scope: string;
+  totalResults: number;
+  results: OnboardingSearchResult[];
+  onsite: Record<string, OnboardingSearchResult[]>;
+  offsite: Record<string, OnboardingSearchResult[]>;
+}
+
+/** 品牌摘要 */
+export interface OnboardingSummary {
+  status: OnboardingStatus;
+  brandName?: string;
+  tagline?: string;
+  description?: string;
+  onsite: Record<string, any>;
+  offsite: Record<string, any>;
+  stats: Record<string, number>;
+  researchReport?: string;
+}
+
+// ============ Projects 类型定义 ============
+
+/** 项目 */
+export interface Project {
+  id: string;
+  name: string;
+  domain?: string;
+  websiteUrl: string;
+  settings?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 项目列表响应 */
+export interface ProjectListResponse {
+  projects: Project[];
+  total: number;
+}
+
+/** 创建项目请求 */
+export interface CreateProjectRequest {
+  name: string;
+  url: string;
+  settings?: Record<string, unknown>;
+}
+
+/** 更新项目请求 */
+export interface UpdateProjectRequest {
+  name?: string;
+  url?: string;
+  settings?: Record<string, unknown>;
+}
+
+/** URL 验证响应 */
+export interface ValidateUrlResponse {
+  input_url: string;      // 原始输入
+  normalized_url: string; // 标准化后的 URL
+  is_valid: boolean;      // 是否有效
+  reachable: boolean;     // 是否可访问
+  status_code: number;    // HTTP 状态码
+  final_url: string;      // 最终 URL（可能重定向）
+  error?: string;         // 错误信息
 }
 
 // 导出单例实例

@@ -61,7 +61,7 @@ async function killProcessOnPort(port: number): Promise<void> {
     await execAsync(`pkill -f "langgraph dev" 2>/dev/null || true`);
     // Wait for process to die
     await new Promise((resolve) => setTimeout(resolve, 2000));
-  } catch (error) {
+  } catch {
     // Ignore errors - process might not exist
   }
 }

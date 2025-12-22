@@ -19,7 +19,6 @@ import type {
   UserPermissions,
   UserModelSettings,
   BackendSubAgent,
-  BackendOrchestratorConfig,
 } from "./types";
 import { apiClient } from "@/lib/api/client";
 

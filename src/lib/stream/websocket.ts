@@ -41,6 +41,7 @@ export type ClientMessageType =
 export type ServerMessageType =
   | 'connected'
   | 'state_update'        // 完整会话状态（连接后推送）
+  | 'state'               // 兼容：FRONTEND_API_GUIDE.md 初始状态
   | 'message_start'       // 新消息开始
   | 'message_delta'       // 流式内容增量
   | 'message_end'         // 消息结束
@@ -48,6 +49,7 @@ export type ServerMessageType =
   | 'tool_call_result'    // 工具调用结果
   | 'subagent_start'      // 子代理开始
   | 'subagent_end'        // 子代理结束
+  | 'todos_update'        // FRONEND_API_GUIDE.md
   | 'todos_updated'       // Todos 更新
   | 'file_operation'      // 文件操作
   | 'error'               // 错误

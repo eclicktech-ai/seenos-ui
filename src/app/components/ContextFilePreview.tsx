@@ -97,7 +97,7 @@ export function ContextFilePreview({ file, open, onOpenChange }: ContextFilePrev
     try {
       await downloadFile(file.id, file.filename);
       toast.success("File downloaded successfully");
-    } catch (err) {
+    } catch {
       toast.error("Failed to download file");
     } finally {
       setIsDownloading(false);

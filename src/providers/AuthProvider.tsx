@@ -73,9 +73,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     // 防止重复初始化（React Strict Mode 或组件重新挂载）
     if (hasInitializedRef.current || isInitializingRef.current) {
+      console.log("[AuthProvider] Skipping init - already initialized");
       return;
     }
 
+    console.log("[AuthProvider] Starting auth initialization...");
     const initAuth = async () => {
       isInitializingRef.current = true;
       

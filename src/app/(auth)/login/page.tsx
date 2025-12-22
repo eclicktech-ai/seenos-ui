@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -28,12 +28,20 @@ export default function LoginPage() {
     }
   }, []);
 
-  // 如果已登录，重定向到首页
+  // 如果已登录，重定向到首页（不显示加载状态）
+  const hasRedirectedRef = useRef(false);
   useEffect(() => {
-    if (isAuthenticated && !authLoading) {
-      router.push("/");
+    if (isAuthenticated && !authLoading && !hasRedirectedRef.current) {
+      hasRedirectedRef.current = true;
+      const onboardingCompleted = localStorage.getItem("seenos_onboarding_completed");
+      if (onboardingCompleted !== "true") {
+        router.replace("/onboarding"); // Use replace instead of push
+      } else {
+        router.replace("/"); // Use replace instead of push
+      }
     }
-  }, [isAuthenticated, authLoading, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, authLoading]); // Don't include router in deps
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -51,18 +59,28 @@ export default function LoginPage() {
           localStorage.removeItem(REMEMBERED_EMAIL_KEY);
         }
         
-        router.push("/");
+        // 保持加载状态，等待跳转完成
+        // 跳转逻辑由上面的 useEffect 处理
       } catch (err) {
         setError(err instanceof Error ? err.message : "Login failed. Please try again.");
-      } finally {
         setIsLoading(false);
       }
     },
-    [email, password, rememberMe, login, router]
+    [email, password, rememberMe, login]
   );
 
-  // 显示加载状态
-  if (authLoading) {
+  // 如果正在加载认证状态，显示加载状态
+  // 但如果已经认证，不显示加载状态，直接由 useEffect 跳转
+  if (authLoading && !isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  // 如果已认证，显示加载状态直到跳转完成
+  if (isAuthenticated || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>

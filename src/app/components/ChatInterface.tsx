@@ -556,41 +556,25 @@ export const ChatInterface = React.memo(() => {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    className="rounded-md border border-border bg-white px-3 py-1.5 text-xs font-normal text-muted-foreground transition-all hover:border-primary/50 hover:bg-accent"
-                    style={{border:'1px solid #e5e5e5',
-                      backgroundColor:'#f5f5f5',
-                      borderRadius:'20px',
-                    }}
+                    className="rounded-full border border-border bg-muted/50 px-3 py-1.5 text-xs font-normal text-muted-foreground transition-all hover:border-primary/50 hover:bg-accent hover:text-accent-foreground"
                   >
                     User Intent Analyzer
                   </button>
                   <button
                     type="button"
-                    className="rounded-md border border-border bg-white px-3 py-1.5 text-xs font-normal text-muted-foreground transition-all hover:border-primary/50 hover:bg-accent"
-                    style={{border:'1px solid #e5e5e5',
-                      backgroundColor:'#f5f5f5',
-                      borderRadius:'20px',
-                    }}
+                    className="rounded-full border border-border bg-muted/50 px-3 py-1.5 text-xs font-normal text-muted-foreground transition-all hover:border-primary/50 hover:bg-accent hover:text-accent-foreground"
                   >
                     AI-Optimized Style Guide
                   </button>
                   <button
                     type="button"
-                    className="rounded-md border border-border bg-white px-3 py-1.5 text-xs font-normal text-muted-foreground transition-all hover:border-primary/50 hover:bg-accent"
-                    style={{border:'1px solid #e5e5e5',
-                      backgroundColor:'#f5f5f5',
-                      borderRadius:'20px',
-                    }}
+                    className="rounded-full border border-border bg-muted/50 px-3 py-1.5 text-xs font-normal text-muted-foreground transition-all hover:border-primary/50 hover:bg-accent hover:text-accent-foreground"
                   >
                     Readability Improver
                   </button>
                   <button
                     type="button"
-                    className="rounded-md border border-border bg-white px-3 py-1.5 text-xs font-normal text-muted-foreground transition-all hover:border-primary/50 hover:bg-accent"
-                    style={{border:'1px solid #e5e5e5',
-                      backgroundColor:'#f5f5f5',
-                      borderRadius:'20px',
-                    }}
+                    className="rounded-full border border-border bg-muted/50 px-3 py-1.5 text-xs font-normal text-muted-foreground transition-all hover:border-primary/50 hover:bg-accent hover:text-accent-foreground"
                   >
                     Niche Topic Tracker
                   </button>
@@ -600,8 +584,8 @@ export const ChatInterface = React.memo(() => {
               <form
                 onSubmit={handleSubmit}
                 className={cn(
-                  "flex flex-1 flex-col overflow-hidden rounded-lg border border-border bg-white",
-                  "transition-colors duration-200 ease-in-out"
+                  "flex flex-1 flex-col overflow-hidden rounded-lg border border-border bg-background",
+                  "transition-colors duration-200 ease-in-out focus-within:border-primary/50"
                 )}
               >
                 <textarea
@@ -619,13 +603,9 @@ export const ChatInterface = React.memo(() => {
                     onClick={handleShowMore}
                     disabled={isLoading}
                     className={cn(
-                      "flex items-center gap-1.5 rounded border border-border bg-white px-3 py-1.5 text-xs font-normal text-muted-foreground transition-colors hover:border-primary/50 hover:bg-accent",
+                      "flex items-center gap-1.5 rounded-full border border-border bg-muted/50 px-3 py-1.5 text-xs font-normal text-muted-foreground transition-colors hover:border-primary/50 hover:bg-accent hover:text-accent-foreground",
                       "disabled:opacity-50 disabled:cursor-not-allowed"
                     )}
-                    style={{border:'1px solid #e5e5e5',
-                      backgroundColor:'#f5f5f5',
-                      borderRadius:'20px',
-                    }}
                   >
                     <Wrench size={14} className="text-muted-foreground" />
                     <span>Tools (13)</span>
