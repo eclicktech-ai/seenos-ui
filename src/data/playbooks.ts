@@ -14,7 +14,6 @@ export interface Playbook {
   agentName: string;
   autoActions: string[];
   outputs: string[];
-  complexity: 'easy' | 'medium' | 'hard';
   tags: string[];
   options?: PlaybookOption[];
 }

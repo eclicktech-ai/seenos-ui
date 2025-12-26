@@ -36,16 +36,177 @@ function preprocessMarkdown(content: string): string {
   // Markdown 标准不支持嵌套代码块，需要将 ```markdown 内部的内容提取出来
   processed = unwrapMarkdownCodeBlocks(processed);
   
-  // 4. 修复表格格式问题
+  // 4. 检测并转换缺少表头的表格格式
+  // 例如：`keyword` | `position` | `volume` 应该转换为标准表格格式
+  processed = detectAndConvertTableFormat(processed);
+  
+  // 5. 修复表格格式问题
   // 有时表格行之间缺少换行符，导致整个表格被当作一行文本
   processed = fixTableFormat(processed);
   
-  // 5. 标准化表格分隔行格式
+  // 6. 标准化表格分隔行格式
   // 某些格式如 |------- | 可能不被所有解析器识别
   // 标准化为 | --- | 格式
   processed = normalizeTableSeparators(processed);
   
   return processed.trim();
+}
+
+/**
+ * 检测并转换缺少表头的表格格式
+ * 
+ * 检测模式：
+ * 1. 包含 | 分隔符的行，且每行至少有 2 个 |
+ * 2. 单元格内容可能用反引号包裹（`content`）
+ * 3. 没有标准的表头行和分隔行
+ * 
+ * 转换规则：
+ * - 如果检测到连续的多行表格数据（至少 1 行），但没有表头
+ * - 自动添加表头（从上下文或默认列名推断）
+ * - 添加分隔行
+ */
+function detectAndConvertTableFormat(content: string): string {
+  if (!content.includes('|')) return content;
+  
+  const lines = content.split('\n');
+  const result: string[] = [];
+  let i = 0;
+  
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    
+    // 检查是否是表格行（包含至少 2 个 |）
+    const pipeCount = (trimmed.match(/\|/g) || []).length;
+    const isTableRow = pipeCount >= 2;
+    
+    // 检查是否是标准表格的分隔行（只包含 |、-、:、空格）
+    const isSeparatorRow = /^\|[\s:|-]+\|$/.test(trimmed) && trimmed.includes('-');
+    
+    // 如果当前行是表格行，但不是分隔行，尝试检测表格块
+    if (isTableRow && !isSeparatorRow) {
+      // 检查前一行是否是分隔行（说明已经是标准表格）
+      const prevLine = i > 0 ? lines[i - 1].trim() : '';
+      const prevIsSeparator = /^\|[\s:|-]+\|$/.test(prevLine) && prevLine.includes('-');
+      
+      // 如果前一行是分隔行，说明已经是标准表格，直接输出
+      if (prevIsSeparator) {
+        result.push(line);
+        i++;
+        continue;
+      }
+      
+      // 收集连续的表格行
+      const tableRows: string[] = [trimmed];
+      let j = i + 1;
+      
+      // 向前查找，看是否有更多表格行
+      while (j < lines.length) {
+        const nextLine = lines[j].trim();
+        const nextPipeCount = (nextLine.match(/\|/g) || []).length;
+        const isNextTableRow = nextPipeCount >= 2;
+        const isNextSeparator = /^\|[\s:|-]+\|$/.test(nextLine) && nextLine.includes('-');
+        
+        // 如果下一行是分隔行，说明这是标准表格，不需要转换
+        if (isNextSeparator) {
+          result.push(...tableRows);
+          result.push(nextLine);
+          i = j + 1;
+          break;
+        }
+        
+        // 如果下一行也是表格行，继续收集
+        if (isNextTableRow) {
+          tableRows.push(nextLine);
+          j++;
+        } else {
+          // 遇到非表格行，停止收集
+          break;
+        }
+      }
+      
+      // 如果收集到表格数据行，且没有表头，进行转换
+      if (j === i + tableRows.length && tableRows.length > 0) {
+        // 分析第一行，确定列数和内容类型
+        const firstRow = tableRows[0];
+        const firstRowCells = firstRow.split('|').map(c => c.trim()).filter(c => c);
+        const columnCount = firstRowCells.length;
+        
+        // 检查单元格内容，推断表头
+        const cellContents = firstRowCells.map(cell => {
+          // 移除反引号
+          const cleaned = cell.replace(/^`|`$/g, '').trim();
+          return cleaned;
+        });
+        
+        // 从上下文推断表头（检查前几行）
+        let headers: string[] = [];
+        const contextLines = [];
+        for (let k = Math.max(0, i - 3); k < i; k++) {
+          contextLines.push(lines[k].trim().toLowerCase());
+        }
+        const contextText = contextLines.join(' ');
+        
+        // 根据上下文和内容推断表头
+        if (contextText.includes('keyword') || contextText.includes('排名') || contextText.includes('position')) {
+          if (columnCount === 4) {
+            headers = ['Keyword', 'Position', 'Search Volume', 'URL'];
+          } else if (columnCount === 3) {
+            headers = ['Keyword', 'Position', 'URL'];
+          }
+        } else if (contextText.includes('关键词')) {
+          if (columnCount === 4) {
+            headers = ['关键词', '排名', '搜索量', 'URL'];
+          } else if (columnCount === 3) {
+            headers = ['关键词', '排名', 'URL'];
+          }
+        }
+        
+        // 如果无法推断，使用默认表头
+        if (headers.length !== columnCount) {
+          headers = Array.from({ length: columnCount }, (_, idx) => {
+            // 尝试从第一个单元格推断
+            if (idx === 0 && cellContents[0]) {
+              // 如果第一个单元格看起来像关键词或标题
+              return 'Item';
+            } else if (idx === 1 && /^\d+$/.test(cellContents[1] || '')) {
+              return 'Position';
+            } else if (idx === 2 && /^\d+$/.test(cellContents[2] || '')) {
+              return 'Value';
+            } else if (idx === columnCount - 1 && (cellContents[columnCount - 1] || '').startsWith('/')) {
+              return 'URL';
+            }
+            return `Column ${idx + 1}`;
+          });
+        }
+        
+        // 生成表头行
+        const headerRow = '| ' + headers.join(' | ') + ' |';
+        // 生成分隔行
+        const separatorRow = '| ' + headers.map(() => '---').join(' | ') + ' |';
+        
+        // 清理数据行中的反引号
+        const cleanedRows = tableRows.map(row => {
+          // 移除单元格中的反引号，但保留其他格式
+          return row.replace(/`([^`]+)`/g, '$1');
+        });
+        
+        // 输出表头、分隔行和数据行
+        result.push(headerRow);
+        result.push(separatorRow);
+        result.push(...cleanedRows);
+        
+        i = j;
+        continue;
+      }
+    }
+    
+    // 不是表格行或不需要转换，直接输出
+    result.push(line);
+    i++;
+  }
+  
+  return result.join('\n');
 }
 
 /**

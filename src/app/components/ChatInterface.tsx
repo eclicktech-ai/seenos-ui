@@ -75,7 +75,6 @@ export const ChatInterface = React.memo(() => {
     cid,
     startNewChat,
     switchConversation,
-    setCid,
   } = useChatContext();
 
   // Use suggestions hook
@@ -200,7 +199,19 @@ export const ChatInterface = React.memo(() => {
       { message: MessageLike; toolCalls: ToolCall[] }
     >();
 
-    messages.forEach((message: MessageLike) => {
+    // 过滤消息：只处理属于当前会话的消息
+    // 防止在 cid 变化时显示不属于当前会话的消息
+    const filteredMessages = messages.filter((message: MessageLike) => {
+      const messageCid = (message as Message).cid;
+      // 如果有当前 cid，只显示匹配的消息
+      if (cid) {
+        return messageCid === cid;
+      }
+      // 如果没有当前 cid（新会话创建中），只显示没有 cid 的消息（新消息）
+      return !messageCid;
+    });
+
+    filteredMessages.forEach((message: MessageLike) => {
       const messageId = message.id || `msg-${Math.random()}`;
       const messageType = (message as { type?: string }).type || (message as { role?: string }).role;
 
@@ -316,7 +327,7 @@ export const ChatInterface = React.memo(() => {
         showAvatar: currentType !== prevType,
       };
     });
-  }, [messages, interrupt]);
+  }, [messages, interrupt, cid]);
 
   // 检测是否需要显示 Assistant 思考动画
   // 条件：正在加载 && 最后一条消息是用户消息（或者最后一条 Assistant 消息没有内容）
@@ -486,10 +497,24 @@ export const ChatInterface = React.memo(() => {
                                    (data.message as { role?: string }).role;
                 const isAssistant = messageType === "ai" || messageType === "assistant";
                 
-                // 判断这条消息是否正在思考（最后一条 Assistant 消息且没有内容）
+                // 判断这条消息是否正在思考
+                // 条件：最后一条 Assistant 消息，正在加载，内容为空，且（没有工具调用 或 所有工具调用都已完成）
+                const messageContent = extractStringFromMessageContent(data.message);
+                const contentLength = messageContent?.trim().length || 0;
+                
+                // 检查所有工具调用是否都已完成
+                const hasToolCalls = data.toolCalls.length > 0;
+                const allToolCallsCompleted = hasToolCalls 
+                  ? data.toolCalls.every(tc => 
+                      tc.status === 'completed' || 
+                      tc.status === 'success' || 
+                      tc.status === 'error'
+                    )
+                  : true; // 没有工具调用时，视为"已完成"
+                
                 const isThinkingMessage = isLastMessage && isAssistant && isLoading && 
-                  !extractStringFromMessageContent(data.message)?.trim() && 
-                  data.toolCalls.length === 0;
+                  contentLength === 0 && 
+                  (data.toolCalls.length === 0 || allToolCallsCompleted);
                 
                 return (
                   <ChatMessage
@@ -681,12 +706,7 @@ export const ChatInterface = React.memo(() => {
               <ConversationList
                 onSelect={handleConversationSelect}
                 onClose={() => setShowAllChats(false)}
-                onDeleteSuccess={async () => {
-                  // Clear chat content
-                  if (setCid) {
-                    await setCid(null);
-                  }
-                }}
+                onDeleteSuccess={handleNewChat}
               />
             </div>
           </div>

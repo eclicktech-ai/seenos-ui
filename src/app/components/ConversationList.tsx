@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { format } from "date-fns";
 import { Loader2, MessageSquare, X, Trash2, Pencil, Check } from "lucide-react";
 import { useQueryState } from "nuqs";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -133,8 +132,6 @@ export function ConversationList({
   const [isSavingTitle, setIsSavingTitle] = useState(false);
   const editInputRef = useRef<HTMLInputElement>(null);
 
-  const router = useRouter();
-
   // 从 AuthProvider 获取认证状态
   const { token, isAuthenticated } = useAuth();
 
@@ -236,10 +233,8 @@ export function ConversationList({
         mutate();
         // 关闭弹出框
         onClose?.();
-        // 清空聊天内容
+        // 刷新聊天区域
         onDeleteSuccess?.();
-        // 删除后导航到首页
-        router.push("/");
       } catch (error) {
         console.error("Failed to delete conversation:", error);
       } finally {
@@ -247,7 +242,7 @@ export function ConversationList({
         setConfirmDeleteId(null);
       }
     },
-    [confirmDeleteId, deletingId, deleteConversation, mutate, router, onClose, onDeleteSuccess]
+    [confirmDeleteId, deletingId, deleteConversation, mutate, onClose, onDeleteSuccess]
   );
 
   // Handle edit title

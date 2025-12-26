@@ -137,43 +137,55 @@ export function PlaybookDialog({
           ) : selectedPlaybook ? (
             <div className="max-w-3xl mx-auto space-y-8">
               {/* Playbook Info */}
-              <div className="space-y-4">
+              <div className="space-y-6">
+                {/* Tags */}
                 <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline">{selectedPlaybook.complexity}</Badge>
                   {selectedPlaybook.tags.map(tag => (
-                    <Badge key={tag} variant="secondary">#{tag}</Badge>
+                    <Badge key={tag} variant="secondary">##{tag}</Badge>
                   ))}
                 </div>
-                <p className="text-lg text-muted-foreground">
+                
+                {/* Description */}
+                <p className="text-base text-muted-foreground leading-relaxed">
                   {selectedPlaybook.description}
                 </p>
                 
-                <div className="grid sm:grid-cols-2 gap-4 text-sm bg-muted/30 p-4 rounded-lg border">
-                  <div className="space-y-2">
-                    <div className="font-medium text-xs text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                      <Zap className="h-3 w-3" /> Auto Actions
+                {/* Actions and Artifacts - Two separate blocks */}
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {/* What this playbook will do */}
+                  <div className="text-sm bg-background/50 p-4 rounded-md border border-border/50">
+                    <div className="space-y-3">
+                      <div className="font-medium text-xs text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                        <Zap className="h-3 w-3 text-foreground" />
+                        What this playbook will do
+                      </div>
+                      <ul className="space-y-2">
+                        {selectedPlaybook.autoActions.map((action, i) => (
+                          <li key={i} className="flex items-start gap-2 text-muted-foreground">
+                            <span className="mt-1.5 h-1 w-1 rounded-full bg-primary shrink-0" />
+                            <span>{action}</span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
-                    <ul className="space-y-1">
-                      {selectedPlaybook.autoActions.map((action, i) => (
-                        <li key={i} className="flex items-start gap-2 text-muted-foreground">
-                          <span className="mt-1.5 h-1 w-1 rounded-full bg-primary shrink-0" />
-                          {action}
-                        </li>
-                      ))}
-                    </ul>
                   </div>
-                  <div className="space-y-2">
-                    <div className="font-medium text-xs text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                      <BarChart className="h-3 w-3" /> Artifacts
+                  
+                  {/* What artifacts will be generated */}
+                  <div className="text-sm bg-background/50 p-4 rounded-md border border-border/50">
+                    <div className="space-y-3">
+                      <div className="font-medium text-xs text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                        <BarChart className="h-3 w-3 text-foreground" />
+                        What artifacts will be generated along with the playbook
+                      </div>
+                      <ul className="space-y-2">
+                        {selectedPlaybook.outputs.map((output, i) => (
+                          <li key={i} className="flex items-start gap-2 text-foreground">
+                            <CheckCircle2 className="h-3 w-3 mt-0.5 text-green-500 shrink-0" />
+                            <span>{output}</span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
-                    <ul className="space-y-1">
-                      {selectedPlaybook.outputs.map((output, i) => (
-                        <li key={i} className="flex items-start gap-2 text-foreground">
-                          <CheckCircle2 className="h-3 w-3 mt-0.5 text-green-500 shrink-0" />
-                          {output}
-                        </li>
-                      ))}
-                    </ul>
                   </div>
                 </div>
               </div>
@@ -236,7 +248,7 @@ export function PlaybookDialog({
             </div>
           ) : (
             /* List View */
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               {filteredPlaybooks.map((playbook) => (
                 <div
                   key={playbook.id}
@@ -252,9 +264,6 @@ export function PlaybookDialog({
                     <div>
                       <h3 className="font-semibold text-lg flex items-center gap-2">
                         {playbook.title}
-                        <Badge variant="outline" className="text-xs font-normal">
-                          {playbook.complexity}
-                        </Badge>
                       </h3>
                       <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                         {playbook.description}
@@ -269,26 +278,30 @@ export function PlaybookDialog({
                     </Button>
                   </div>
 
-                  <div className="grid sm:grid-cols-2 gap-4 text-sm bg-background/50 p-3 rounded-md border border-border/50">
-                    <div className="space-y-1.5">
-                      <div className="font-medium text-xs text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                        <Zap className="h-3 w-3" /> Auto Actions
-                      </div>
-                      <div className="text-muted-foreground line-clamp-2">
-                        {playbook.autoActions.slice(0, 2).join(", ")}...
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="text-sm bg-background/50 p-3 rounded-md border border-border/50">
+                      <div className="space-y-1.5">
+                        <div className="font-medium text-xs text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                          <Zap className="h-3 w-3 text-foreground" />What this playbook will do 
+                        </div>
+                        <div className="text-muted-foreground line-clamp-2">
+                          {playbook.autoActions.slice(0, 2).join(", ")}...
+                        </div>
                       </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <div className="font-medium text-xs text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                        <BarChart className="h-3 w-3" /> Artifacts
-                      </div>
-                      <div className="text-foreground line-clamp-2">
-                        {playbook.outputs.slice(0, 2).join(", ")}...
+                    <div className="text-sm bg-background/50 p-3 rounded-md border border-border/50">
+                      <div className="space-y-1.5">
+                        <div className="font-medium text-xs text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                          <BarChart className="h-3 w-3 text-foreground" /> What artifacts will be generated along with the playbook
+                        </div>
+                        <div className="text-foreground line-clamp-2">
+                          {playbook.outputs.slice(0, 2).join(", ")}...
+                        </div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-2 pt-1">
+                  {/* <div className="flex flex-wrap gap-2 pt-1">
                     {playbook.tags.slice(0, 3).map((tag) => (
                       <Badge key={tag} variant="secondary" className="text-xs">
                         #{tag}
@@ -297,12 +310,12 @@ export function PlaybookDialog({
                     {playbook.tags.length > 3 && (
                       <span className="text-xs text-muted-foreground self-center">+{playbook.tags.length - 3}</span>
                     )}
-                  </div>
+                  </div> */}
                 </div>
               ))}
 
               {filteredPlaybooks.length === 0 && (
-                <div className="text-center py-12 text-muted-foreground col-span-2">
+                <div className="text-center py-12 text-muted-foreground">
                   No playbooks found for this category yet.
                 </div>
               )}

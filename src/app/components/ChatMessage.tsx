@@ -319,15 +319,6 @@ export const ChatMessage = React.memo<ChatMessageProps>(
             {isUser ? "You" : "Assistant"}
           </div>
 
-          {/* 思考中动画 - 当没有内容且正在加载时显示 */}
-          {!isUser && !hasContent && !hasToolCalls && (isThinking || isLoading) && (
-            <div className="relative flex justify-start">
-              <div className="rounded-2xl rounded-tl-sm bg-secondary/50 px-4 py-3 dark:bg-secondary/30">
-                <ThinkingIndicator />
-              </div>
-            </div>
-          )}
-
           {/* 用户消息直接显示 */}
           {isUser && hasContent && (
             <div className="relative flex justify-end">
@@ -429,6 +420,34 @@ export const ChatMessage = React.memo<ChatMessageProps>(
                     })}
                 </div>
               )}
+
+              {/* 思考中动画 - 显示在工具调用下方，当所有工具调用都已完成但内容还未出现时 */}
+              {(() => {
+                // 检查所有工具调用是否都已完成
+                const allToolCallsCompleted = hasToolCalls 
+                  ? toolCalls.every(tc => 
+                      tc.status === 'completed' || 
+                      tc.status === 'success' || 
+                      tc.status === 'error'
+                    )
+                  : true; // 没有工具调用时，视为"已完成"
+                
+                const shouldShowThinking = !isUser && 
+                  !hasContent && 
+                  (!hasToolCalls || allToolCallsCompleted) && 
+                  (isThinking || isLoading);
+                
+                return shouldShowThinking ? (
+                  <div className={cn(
+                    "relative flex justify-start",
+                    (hasToolCalls || subAgents.length > 0) && "mt-3"
+                  )}>
+                    <div className="rounded-2xl rounded-tl-sm bg-secondary/50 px-4 py-3 dark:bg-secondary/30">
+                      <ThinkingIndicator />
+                    </div>
+                  </div>
+                ) : null;
+              })()}
 
               {/* 消息内容（Summary）- 最后显示 */}
               {hasContent && (
