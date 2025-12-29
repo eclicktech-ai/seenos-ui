@@ -46,6 +46,22 @@ export function mapApiResponseToContextData(apiResponse: ContextApiResponse): Co
   const ensureStringArray = (v: any): string[] =>
     Array.isArray(v) ? v.filter((x) => typeof x === "string").map((x) => x.trim()).filter(Boolean) : [];
 
+  // Helper function to get field value from multiple possible paths (supports camelCase, snake_case, nested, flat)
+  const getFieldValue = (obj: any, paths: string[]): string => {
+    for (const path of paths) {
+      const parts = path.split('.');
+      let value: any = obj;
+      for (const part of parts) {
+        if (value == null) break;
+        value = value[part];
+      }
+      if (value != null && value !== "") {
+        return ensureString(value);
+      }
+    }
+    return "";
+  };
+
   const normalizeReviewPlatform = (platformOrName: any, profileUrl?: any): string => {
     const raw = ensureString(platformOrName).trim();
     const rawLower = raw.toLowerCase();
@@ -179,92 +195,92 @@ export function mapApiResponseToContextData(apiResponse: ContextApiResponse): Co
         type: "other" as const,
       }] : []),
       // Logo URLs - support both flat and nested structure
-      ...(ensureString((brandAssetsSingleton as any)?.logos?.fullLogoLight || (brandAssetsSingleton as any)?.logos?.full_logo_light || (brandAssetsSingleton as any)?.logoUrl || (brandAssetsSingleton as any)?.logo_url) ? [{
+      ...(getFieldValue(brandAssetsSingleton, ["logos.fullLogoLight", "logos.full_logo_light", "logoUrl", "logo_url"]) ? [{
         id: uuidv4(),
-        name: ensureString((brandAssetsSingleton as any)?.logos?.fullLogoLight || (brandAssetsSingleton as any)?.logos?.full_logo_light || (brandAssetsSingleton as any)?.logoUrl || (brandAssetsSingleton as any)?.logo_url),
+        name: getFieldValue(brandAssetsSingleton, ["logos.fullLogoLight", "logos.full_logo_light", "logoUrl", "logo_url"]),
         url: "#brand-logo",
         type: "other" as const,
       }] : []),
-      ...(ensureString((brandAssetsSingleton as any)?.logos?.fullLogoDark || (brandAssetsSingleton as any)?.logos?.full_logo_dark || (brandAssetsSingleton as any)?.logoUrlDark || (brandAssetsSingleton as any)?.logo_url_dark) ? [{
+      ...(getFieldValue(brandAssetsSingleton, ["logos.fullLogoDark", "logos.full_logo_dark", "logoUrlDark", "logo_url_dark"]) ? [{
         id: uuidv4(),
-        name: ensureString((brandAssetsSingleton as any)?.logos?.fullLogoDark || (brandAssetsSingleton as any)?.logos?.full_logo_dark || (brandAssetsSingleton as any)?.logoUrlDark || (brandAssetsSingleton as any)?.logo_url_dark),
+        name: getFieldValue(brandAssetsSingleton, ["logos.fullLogoDark", "logos.full_logo_dark", "logoUrlDark", "logo_url_dark"]),
         url: "#brand-logo-dark",
         type: "other" as const,
       }] : []),
-      ...(ensureString((brandAssetsSingleton as any)?.logos?.iconOnlyLight || (brandAssetsSingleton as any)?.logos?.icon_only_light || (brandAssetsSingleton as any)?.iconUrl || (brandAssetsSingleton as any)?.icon_url) ? [{
+      ...(getFieldValue(brandAssetsSingleton, ["logos.iconOnlyLight", "logos.icon_only_light", "iconUrl", "icon_url"]) ? [{
         id: uuidv4(),
-        name: ensureString((brandAssetsSingleton as any)?.logos?.iconOnlyLight || (brandAssetsSingleton as any)?.logos?.icon_only_light || (brandAssetsSingleton as any)?.iconUrl || (brandAssetsSingleton as any)?.icon_url),
+        name: getFieldValue(brandAssetsSingleton, ["logos.iconOnlyLight", "logos.icon_only_light", "iconUrl", "icon_url"]),
         url: "#brand-logo-icon",
         type: "other" as const,
       }] : []),
-      ...(ensureString((brandAssetsSingleton as any)?.logos?.iconOnlyDark || (brandAssetsSingleton as any)?.logos?.icon_only_dark || (brandAssetsSingleton as any)?.iconUrlDark || (brandAssetsSingleton as any)?.icon_url_dark) ? [{
+      ...(getFieldValue(brandAssetsSingleton, ["logos.iconOnlyDark", "logos.icon_only_dark", "iconUrlDark", "icon_url_dark"]) ? [{
         id: uuidv4(),
-        name: ensureString((brandAssetsSingleton as any)?.logos?.iconOnlyDark || (brandAssetsSingleton as any)?.logos?.icon_only_dark || (brandAssetsSingleton as any)?.iconUrlDark || (brandAssetsSingleton as any)?.icon_url_dark),
+        name: getFieldValue(brandAssetsSingleton, ["logos.iconOnlyDark", "logos.icon_only_dark", "iconUrlDark", "icon_url_dark"]),
         url: "#brand-logo-icon-dark",
         type: "other" as const,
       }] : []),
       // Colors - support both flat and nested structure
-      ...(ensureString((brandAssetsSingleton as any)?.colors?.primaryLight || (brandAssetsSingleton as any)?.colors?.primary_light || (brandAssetsSingleton as any)?.primaryColor || (brandAssetsSingleton as any)?.primary_color) ? [{
+      ...(getFieldValue(brandAssetsSingleton, ["colors.primaryLight", "colors.primary_light", "primaryColor", "primary_color", "colors.primary"]) ? [{
         id: uuidv4(),
-        name: ensureString((brandAssetsSingleton as any)?.colors?.primaryLight || (brandAssetsSingleton as any)?.colors?.primary_light || (brandAssetsSingleton as any)?.primaryColor || (brandAssetsSingleton as any)?.primary_color),
+        name: getFieldValue(brandAssetsSingleton, ["colors.primaryLight", "colors.primary_light", "primaryColor", "primary_color", "colors.primary"]),
         url: "#brand-color-primary",
         type: "other" as const,
       }] : []),
-      ...(ensureString((brandAssetsSingleton as any)?.colors?.primaryDark || (brandAssetsSingleton as any)?.colors?.primary_dark) ? [{
+      ...(getFieldValue(brandAssetsSingleton, ["colors.primaryDark", "colors.primary_dark"]) ? [{
         id: uuidv4(),
-        name: ensureString((brandAssetsSingleton as any)?.colors?.primaryDark || (brandAssetsSingleton as any)?.colors?.primary_dark),
+        name: getFieldValue(brandAssetsSingleton, ["colors.primaryDark", "colors.primary_dark"]),
         url: "#brand-color-primary-dark",
         type: "other" as const,
       }] : []),
-      ...(ensureString((brandAssetsSingleton as any)?.colors?.secondaryLight || (brandAssetsSingleton as any)?.colors?.secondary_light || (brandAssetsSingleton as any)?.secondaryColor || (brandAssetsSingleton as any)?.secondary_color) ? [{
+      ...(getFieldValue(brandAssetsSingleton, ["colors.secondaryLight", "colors.secondary_light", "secondaryColor", "secondary_color", "colors.secondary"]) ? [{
         id: uuidv4(),
-        name: ensureString((brandAssetsSingleton as any)?.colors?.secondaryLight || (brandAssetsSingleton as any)?.colors?.secondary_light || (brandAssetsSingleton as any)?.secondaryColor || (brandAssetsSingleton as any)?.secondary_color),
+        name: getFieldValue(brandAssetsSingleton, ["colors.secondaryLight", "colors.secondary_light", "secondaryColor", "secondary_color", "colors.secondary"]),
         url: "#brand-color-secondary",
         type: "other" as const,
       }] : []),
-      ...(ensureString((brandAssetsSingleton as any)?.colors?.secondaryDark || (brandAssetsSingleton as any)?.colors?.secondary_dark) ? [{
+      ...(getFieldValue(brandAssetsSingleton, ["colors.secondaryDark", "colors.secondary_dark"]) ? [{
         id: uuidv4(),
-        name: ensureString((brandAssetsSingleton as any)?.colors?.secondaryDark || (brandAssetsSingleton as any)?.colors?.secondary_dark),
+        name: getFieldValue(brandAssetsSingleton, ["colors.secondaryDark", "colors.secondary_dark"]),
         url: "#brand-color-secondary-dark",
         type: "other" as const,
       }] : []),
       // Typography - support both flat and nested structure
-      ...(ensureString((brandAssetsSingleton as any)?.typography?.heading || (brandAssetsSingleton as any)?.typography?.heading_font || (brandAssetsSingleton as any)?.headingFont || (brandAssetsSingleton as any)?.heading_font) ? [{
+      ...(getFieldValue(brandAssetsSingleton, ["typography.heading", "typography.heading_font", "headingFont", "heading_font", "typography.fontFamily"]) ? [{
         id: uuidv4(),
-        name: ensureString((brandAssetsSingleton as any)?.typography?.heading || (brandAssetsSingleton as any)?.typography?.heading_font || (brandAssetsSingleton as any)?.headingFont || (brandAssetsSingleton as any)?.heading_font),
+        name: getFieldValue(brandAssetsSingleton, ["typography.heading", "typography.heading_font", "headingFont", "heading_font", "typography.fontFamily"]),
         url: "#brand-font-heading",
         type: "other" as const,
       }] : []),
-      ...(ensureString((brandAssetsSingleton as any)?.typography?.body || (brandAssetsSingleton as any)?.typography?.body_font || (brandAssetsSingleton as any)?.bodyFont || (brandAssetsSingleton as any)?.body_font) ? [{
+      ...(getFieldValue(brandAssetsSingleton, ["typography.body", "typography.body_font", "bodyFont", "body_font", "typography.bodyFont"]) ? [{
         id: uuidv4(),
-        name: ensureString((brandAssetsSingleton as any)?.typography?.body || (brandAssetsSingleton as any)?.typography?.body_font || (brandAssetsSingleton as any)?.bodyFont || (brandAssetsSingleton as any)?.body_font),
+        name: getFieldValue(brandAssetsSingleton, ["typography.body", "typography.body_font", "bodyFont", "body_font", "typography.bodyFont"]),
         url: "#brand-font-body",
         type: "other" as const,
       }] : []),
       // Images - ogImage and favicon
-      ...(ensureString((brandAssetsSingleton as any)?.images?.ogImage || (brandAssetsSingleton as any)?.images?.og_image || (brandAssetsSingleton as any)?.ogImage || (brandAssetsSingleton as any)?.og_image) ? [{
+      ...(getFieldValue(brandAssetsSingleton, ["images.ogImage", "images.og_image", "ogImage", "og_image"]) ? [{
         id: uuidv4(),
-        name: ensureString((brandAssetsSingleton as any)?.images?.ogImage || (brandAssetsSingleton as any)?.images?.og_image || (brandAssetsSingleton as any)?.ogImage || (brandAssetsSingleton as any)?.og_image),
+        name: getFieldValue(brandAssetsSingleton, ["images.ogImage", "images.og_image", "ogImage", "og_image"]),
         url: "#meta-og-image",
         type: "other" as const,
       }] : []),
-      ...(ensureString((brandAssetsSingleton as any)?.images?.favicon || (brandAssetsSingleton as any)?.favicon) ? [{
+      ...(getFieldValue(brandAssetsSingleton, ["images.favicon", "favicon", "faviconUrl", "favicon_url"]) ? [{
         id: uuidv4(),
-        name: ensureString((brandAssetsSingleton as any)?.images?.favicon || (brandAssetsSingleton as any)?.favicon),
+        name: getFieldValue(brandAssetsSingleton, ["images.favicon", "favicon", "faviconUrl", "favicon_url"]),
         url: "#meta-favicon",
         type: "other" as const,
       }] : []),
       // Tone of Voice
-      ...(ensureString((brandAssetsSingleton as any)?.tone || (brandAssetsSingleton as any)?.toneOfVoice || (brandAssetsSingleton as any)?.tone_of_voice) ? [{
+      ...(getFieldValue(brandAssetsSingleton, ["tone", "toneOfVoice", "tone_of_voice"]) ? [{
         id: uuidv4(),
-        name: ensureString((brandAssetsSingleton as any)?.tone || (brandAssetsSingleton as any)?.toneOfVoice || (brandAssetsSingleton as any)?.tone_of_voice),
+        name: getFieldValue(brandAssetsSingleton, ["tone", "toneOfVoice", "tone_of_voice"]),
         url: "#brand-tone",
         type: "other" as const,
       }] : []),
       // Languages
-      ...(ensureString((brandAssetsSingleton as any)?.languages || (brandAssetsSingleton as any)?.supportedLanguages || (brandAssetsSingleton as any)?.supported_languages) ? [{
+      ...(getFieldValue(brandAssetsSingleton, ["languages", "supportedLanguages", "supported_languages"]) ? [{
         id: uuidv4(),
-        name: ensureString((brandAssetsSingleton as any)?.languages || (brandAssetsSingleton as any)?.supportedLanguages || (brandAssetsSingleton as any)?.supported_languages),
+        name: getFieldValue(brandAssetsSingleton, ["languages", "supportedLanguages", "supported_languages"]),
         url: "#brand-languages",
         type: "other" as const,
       }] : []),
@@ -330,6 +346,32 @@ export function mapApiResponseToContextData(apiResponse: ContextApiResponse): Co
         type: "other" as const,
         description: ensureString(item.url),
       })),
+
+      // ============ Core Pages / Key Pages ============
+      // Map core_pages and key_pages to websiteContent with proper type based on pageType
+      ...(((onsite as any).items?.core_pages || (onsite as any).items?.key_pages || []) as any[]).map((item: any) => {
+        const pageType = item.extra?.pageType || item.pageType || "other";
+        // Map pageType to websiteContent type
+        let type: string = "other";
+        if (pageType === "home") type = "home";
+        else if (pageType === "about") type = "about";
+        else if (pageType === "contact") type = "contact";
+        else if (pageType === "career") type = "career";
+        else if (pageType === "pricing") type = "pricing";
+        else if (pageType === "faq") type = "faq";
+        else if (pageType === "legal") type = "legal";
+        else if (pageType === "documentation") type = "documentation";
+        else if (pageType === "product") type = "product";
+        else if (pageType === "case_study") type = "case_study";
+        
+        return {
+          id: item.id || uuidv4(),
+          name: ensureString(item.title || item.name || ""),
+          url: ensureString(item.url || ""),
+          type: type as any,
+          description: ensureString(item.description || ""),
+        };
+      }),
 
       // Problem Statement
       // Support both string array format: ["item1", "item2"] 

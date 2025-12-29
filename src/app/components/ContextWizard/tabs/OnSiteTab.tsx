@@ -239,55 +239,34 @@ export function OnSiteTab({ contextData, openEditDialog }: TabProps) {
               <Label className="text-xs text-muted-foreground font-medium">
                 Core Pages
               </Label>
-              <div className="grid grid-cols-1 gap-3">
-                <div>
-                  <Label className="text-xs text-muted-foreground/70 mb-0.5 block">
-                    Home
-                  </Label>
-                  <ReadOnlyField
-                    value={
-                      contextData.onSite.websiteContent.find(
-                        (c: any) => c.type === "home"
-                      )?.url
-                    }
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground/70 mb-0.5 block">
-                    About
-                  </Label>
-                  <ReadOnlyField
-                    value={
-                      contextData.onSite.websiteContent.find(
-                        (c: any) => c.type === "about"
-                      )?.url
-                    }
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground/70 mb-0.5 block">
-                    Contact
-                  </Label>
-                  <ReadOnlyField
-                    value={
-                      contextData.onSite.websiteContent.find(
-                        (c: any) => c.url === "#page-contact"
-                      )?.name
-                    }
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground/70 mb-0.5 block">
-                    Careers
-                  </Label>
-                  <ReadOnlyField
-                    value={
-                      contextData.onSite.websiteContent.find(
-                        (c: any) => c.type === "career"
-                      )?.url
-                    }
-                  />
-                </div>
+              <div className="space-y-2">
+                {(() => {
+                  const corePages = contextData.onSite.websiteContent.filter(
+                    (c: any) => ["home", "about", "contact", "career"].includes(c.type)
+                  );
+                  if (corePages.length === 0) {
+                    return (
+                      <div className="text-xs text-muted-foreground text-center py-2 border border-dashed rounded-md">
+                        No core pages
+                      </div>
+                    );
+                  }
+                  return corePages.map((page: any) => (
+                    <div key={page.id} className="p-3 border rounded-lg bg-muted/30">
+                      <div className="font-medium text-sm">
+                        {page.name || "Untitled"}
+                      </div>
+                      {page.url && (
+                        <div className="text-xs text-blue-600 mt-1">{page.url}</div>
+                      )}
+                      {page.description && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {page.description}
+                        </div>
+                      )}
+                    </div>
+                  ));
+                })()}
               </div>
             </div>
 
@@ -296,55 +275,34 @@ export function OnSiteTab({ contextData, openEditDialog }: TabProps) {
               <Label className="text-xs text-muted-foreground font-medium">
                 Product Pages
               </Label>
-              <div className="grid grid-cols-1 gap-3">
-                <div>
-                  <Label className="text-xs text-muted-foreground/70 mb-0.5 block">
-                    Products
-                  </Label>
-                  <ReadOnlyField
-                    value={
-                      contextData.onSite.websiteContent.find(
-                        (c: any) => c.url === "#page-products"
-                      )?.name
-                    }
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground/70 mb-0.5 block">
-                    Features
-                  </Label>
-                  <ReadOnlyField
-                    value={
-                      contextData.onSite.websiteContent.find(
-                        (c: any) => c.url === "#page-features"
-                      )?.name
-                    }
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground/70 mb-0.5 block">
-                    Pricing
-                  </Label>
-                  <ReadOnlyField
-                    value={
-                      contextData.onSite.websiteContent.find(
-                        (c: any) => c.type === "pricing"
-                      )?.url
-                    }
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground/70 mb-0.5 block">
-                    Solutions
-                  </Label>
-                  <ReadOnlyField
-                    value={
-                      contextData.onSite.websiteContent.find(
-                        (c: any) => c.url === "#page-solutions"
-                      )?.name
-                    }
-                  />
-                </div>
+              <div className="space-y-2">
+                {(() => {
+                  const productPages = contextData.onSite.websiteContent.filter(
+                    (c: any) => c.type === "product"
+                  );
+                  if (productPages.length === 0) {
+                    return (
+                      <div className="text-xs text-muted-foreground text-center py-2 border border-dashed rounded-md">
+                        No product pages
+                      </div>
+                    );
+                  }
+                  return productPages.map((page: any) => (
+                    <div key={page.id} className="p-3 border rounded-lg bg-muted/30">
+                      <div className="font-medium text-sm">
+                        {page.name || "Untitled"}
+                      </div>
+                      {page.url && (
+                        <div className="text-xs text-blue-600 mt-1">{page.url}</div>
+                      )}
+                      {page.description && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {page.description}
+                        </div>
+                      )}
+                    </div>
+                  ));
+                })()}
               </div>
             </div>
 
@@ -353,55 +311,34 @@ export function OnSiteTab({ contextData, openEditDialog }: TabProps) {
               <Label className="text-xs text-muted-foreground font-medium">
                 Resources
               </Label>
-              <div className="grid grid-cols-1 gap-3">
-                <div>
-                  <Label className="text-xs text-muted-foreground/70 mb-0.5 block">
-                    Blog
-                  </Label>
-                  <ReadOnlyField
-                    value={
-                      contextData.onSite.websiteContent.find(
-                        (c: any) => c.url === "#page-blog"
-                      )?.name
-                    }
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground/70 mb-0.5 block">
-                    Docs
-                  </Label>
-                  <ReadOnlyField
-                    value={
-                      contextData.onSite.websiteContent.find(
-                        (c: any) => c.type === "documentation"
-                      )?.url
-                    }
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground/70 mb-0.5 block">
-                    FAQ
-                  </Label>
-                  <ReadOnlyField
-                    value={
-                      contextData.onSite.websiteContent.find(
-                        (c: any) => c.type === "faq"
-                      )?.url
-                    }
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground/70 mb-0.5 block">
-                    Cases
-                  </Label>
-                  <ReadOnlyField
-                    value={
-                      contextData.onSite.websiteContent.find(
-                        (c: any) => c.type === "case_study"
-                      )?.url
-                    }
-                  />
-                </div>
+              <div className="space-y-2">
+                {(() => {
+                  const resourcePages = contextData.onSite.websiteContent.filter(
+                    (c: any) => ["documentation", "faq", "case_study"].includes(c.type)
+                  );
+                  if (resourcePages.length === 0) {
+                    return (
+                      <div className="text-xs text-muted-foreground text-center py-2 border border-dashed rounded-md">
+                        No resource pages
+                      </div>
+                    );
+                  }
+                  return resourcePages.map((page: any) => (
+                    <div key={page.id} className="p-3 border rounded-lg bg-muted/30">
+                      <div className="font-medium text-sm">
+                        {page.name || "Untitled"}
+                      </div>
+                      {page.url && (
+                        <div className="text-xs text-blue-600 mt-1">{page.url}</div>
+                      )}
+                      {page.description && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {page.description}
+                        </div>
+                      )}
+                    </div>
+                  ));
+                })()}
               </div>
             </div>
 
@@ -410,55 +347,34 @@ export function OnSiteTab({ contextData, openEditDialog }: TabProps) {
               <Label className="text-xs text-muted-foreground font-medium">
                 Legal & Updates
               </Label>
-              <div className="grid grid-cols-1 gap-3">
-                <div>
-                  <Label className="text-xs text-muted-foreground/70 mb-0.5 block">
-                    Terms
-                  </Label>
-                  <ReadOnlyField
-                    value={
-                      contextData.onSite.websiteContent.find(
-                        (c: any) => c.type === "legal"
-                      )?.url
-                    }
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground/70 mb-0.5 block">
-                    Privacy
-                  </Label>
-                  <ReadOnlyField
-                    value={
-                      contextData.onSite.websiteContent.find(
-                        (c: any) => c.url === "#page-privacy"
-                      )?.name
-                    }
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground/70 mb-0.5 block">
-                    Changes
-                  </Label>
-                  <ReadOnlyField
-                    value={
-                      contextData.onSite.websiteContent.find(
-                        (c: any) => c.url === "#page-changelog"
-                      )?.name
-                    }
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground/70 mb-0.5 block">
-                    Status
-                  </Label>
-                  <ReadOnlyField
-                    value={
-                      contextData.onSite.websiteContent.find(
-                        (c: any) => c.url === "#page-status"
-                      )?.name
-                    }
-                  />
-                </div>
+              <div className="space-y-2">
+                {(() => {
+                  const legalPages = contextData.onSite.websiteContent.filter(
+                    (c: any) => c.type === "legal"
+                  );
+                  if (legalPages.length === 0) {
+                    return (
+                      <div className="text-xs text-muted-foreground text-center py-2 border border-dashed rounded-md">
+                        No legal pages
+                      </div>
+                    );
+                  }
+                  return legalPages.map((page: any) => (
+                    <div key={page.id} className="p-3 border rounded-lg bg-muted/30">
+                      <div className="font-medium text-sm">
+                        {page.name || "Untitled"}
+                      </div>
+                      {page.url && (
+                        <div className="text-xs text-blue-600 mt-1">{page.url}</div>
+                      )}
+                      {page.description && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {page.description}
+                        </div>
+                      )}
+                    </div>
+                  ));
+                })()}
               </div>
             </div>
           </div>
@@ -472,17 +388,31 @@ export function OnSiteTab({ contextData, openEditDialog }: TabProps) {
               count={contextData.onSite.landingPages?.length || 0}
               onEdit={openEditDialog}
             />
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               {contextData.onSite.landingPages.length === 0 ? (
                 <div className="text-xs text-muted-foreground text-center py-2 border border-dashed rounded-md">
                   No landing pages
                 </div>
               ) : (
                 contextData.onSite.landingPages.map((page: any) => (
-                  <ReadOnlyField
-                    key={page.id}
-                    value={page.url}
-                  />
+                  <div key={page.id} className="p-3 border rounded-lg bg-muted/30">
+                    <div className="font-medium text-sm">
+                      {page.name || "Untitled"}
+                    </div>
+                    {page.description && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {page.description}
+                      </div>
+                    )}
+                    {page.url && (
+                      <div className="text-xs text-blue-600 mt-1">{page.url}</div>
+                    )}
+                    {page.type && page.type !== "other" && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Type: {page.type}
+                      </div>
+                    )}
+                  </div>
                 ))
               )}
             </div>

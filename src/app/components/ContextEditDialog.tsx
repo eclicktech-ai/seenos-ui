@@ -39,6 +39,7 @@ import {
   CreatorsForm,
   CoverageForm,
   ProductsServicesForm,
+  LandingPagesForm,
   SimpleItemListForm,
   PlatformSelectForm,
   DualFieldForm,
@@ -197,6 +198,22 @@ export function ContextEditDialog({
   };
 
   // ============ Singleton Normalizers (UI <-> API) ============
+  // Helper function to get field value from multiple possible paths (supports camelCase, snake_case, nested, flat)
+  const getFieldValue = (obj: any, paths: string[]): string => {
+    for (const path of paths) {
+      const parts = path.split('.');
+      let value: any = obj;
+      for (const part of parts) {
+        if (value == null) break;
+        value = value[part];
+      }
+      if (value != null && value !== "") {
+        return String(value);
+      }
+    }
+    return "";
+  };
+
   const toUiBrandAssets = (raw: any) => {
     // Accept both the "flat" shape (from context/all) and the nested UI shape.
     // context/all example:
@@ -213,29 +230,29 @@ export function ContextEditDialog({
     return {
       // nested UI shape
       brandName: brandNameObj,
-      metaDescription: raw?.metaDescription ?? raw?.meta_description ?? "",
+      metaDescription: getFieldValue(raw, ["metaDescription", "meta_description"]),
       images: {
-        ogImage: raw?.images?.ogImage ?? raw?.images?.og_image ?? raw?.ogImage ?? raw?.og_image ?? "",
-        favicon: raw?.images?.favicon ?? raw?.favicon ?? "",
+        ogImage: getFieldValue(raw, ["images.ogImage", "images.og_image", "ogImage", "og_image"]),
+        favicon: getFieldValue(raw, ["images.favicon", "favicon", "faviconUrl", "favicon_url"]),
       },
       logos: {
-        fullLogoLight: raw?.logos?.fullLogoLight ?? raw?.logos?.full_logo_light ?? raw?.logoUrl ?? raw?.logo_url ?? "",
-        fullLogoDark: raw?.logos?.fullLogoDark ?? raw?.logos?.full_logo_dark ?? raw?.logoUrlDark ?? raw?.logo_url_dark ?? "",
-        iconOnlyLight: raw?.logos?.iconOnlyLight ?? raw?.logos?.icon_only_light ?? raw?.iconUrl ?? raw?.icon_url ?? "",
-        iconOnlyDark: raw?.logos?.iconOnlyDark ?? raw?.logos?.icon_only_dark ?? raw?.iconUrlDark ?? raw?.icon_url_dark ?? "",
+        fullLogoLight: getFieldValue(raw, ["logos.fullLogoLight", "logos.full_logo_light", "logoUrl", "logo_url"]),
+        fullLogoDark: getFieldValue(raw, ["logos.fullLogoDark", "logos.full_logo_dark", "logoUrlDark", "logo_url_dark"]),
+        iconOnlyLight: getFieldValue(raw, ["logos.iconOnlyLight", "logos.icon_only_light", "iconUrl", "icon_url"]),
+        iconOnlyDark: getFieldValue(raw, ["logos.iconOnlyDark", "logos.icon_only_dark", "iconUrlDark", "icon_url_dark"]),
       },
       colors: {
-        primaryLight: raw?.colors?.primaryLight ?? raw?.colors?.primary_light ?? raw?.primaryColor ?? raw?.primary_color ?? "",
-        primaryDark: raw?.colors?.primaryDark ?? raw?.colors?.primary_dark ?? "",
-        secondaryLight: raw?.colors?.secondaryLight ?? raw?.colors?.secondary_light ?? raw?.secondaryColor ?? raw?.secondary_color ?? "",
-        secondaryDark: raw?.colors?.secondaryDark ?? raw?.colors?.secondary_dark ?? "",
+        primaryLight: getFieldValue(raw, ["colors.primaryLight", "colors.primary_light", "primaryColor", "primary_color", "colors.primary"]),
+        primaryDark: getFieldValue(raw, ["colors.primaryDark", "colors.primary_dark"]),
+        secondaryLight: getFieldValue(raw, ["colors.secondaryLight", "colors.secondary_light", "secondaryColor", "secondary_color", "colors.secondary"]),
+        secondaryDark: getFieldValue(raw, ["colors.secondaryDark", "colors.secondary_dark"]),
       },
       typography: {
-        heading: raw?.typography?.heading ?? raw?.typography?.heading_font ?? raw?.headingFont ?? raw?.heading_font ?? "",
-        body: raw?.typography?.body ?? raw?.typography?.body_font ?? raw?.bodyFont ?? raw?.body_font ?? "",
+        heading: getFieldValue(raw, ["typography.heading", "typography.heading_font", "headingFont", "heading_font", "typography.fontFamily"]),
+        body: getFieldValue(raw, ["typography.body", "typography.body_font", "bodyFont", "body_font", "typography.bodyFont"]),
       },
-      tone: raw?.tone ?? raw?.toneOfVoice ?? raw?.tone_of_voice ?? "",
-      languages: raw?.languages ?? raw?.supportedLanguages ?? raw?.supported_languages ?? "",
+      tone: getFieldValue(raw, ["tone", "toneOfVoice", "tone_of_voice"]),
+      languages: getFieldValue(raw, ["languages", "supportedLanguages", "supported_languages"]),
     };
   };
 
@@ -1660,9 +1677,20 @@ export function ContextEditDialog({
             </ScrollArea>
           );
         }
+        case "landing_pages":
+          return (
+            <ScrollArea className="h-[500px]">
+              <LandingPagesForm
+                items={itemsList}
+                onAdd={handleAdd}
+                onUpdate={handleUpdate}
+                onDelete={handleDelete}
+                label={config.label}
+              />
+            </ScrollArea>
+          );
         case "key_pages":
         case "resources":
-        case "landing_pages":
         case "blog_posts":
         case "sitemap_urls":
         case "header_links":
