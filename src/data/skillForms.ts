@@ -434,7 +434,7 @@ export const skillFormConfigs: Record<string, SkillFormConfig> = {
   },
 
   // Schema Markup Generator
-  'schema-markup-generator': {
+  'schema-generator': {
     fields: [
       {
         key: 'pageUrl',
