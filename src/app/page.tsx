@@ -117,7 +117,7 @@ function AuthenticatedHome() {
   const router = useRouter();
   const { user, logout, token, isAuthenticated } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const { setDeepResearchStatus, setOnboardingStatus } = useContextMenu();
+  const { setDeepResearchStatus, setOnboardingStatus, onboardingStatus } = useContextMenu();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hasCheckedOnboarding, setHasCheckedOnboarding] = useState(false);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -128,7 +128,7 @@ function AuthenticatedHome() {
     token,
   });
 
-  // 检查 onboarding 状态并在完成时获取 Deep Research 结果
+  // 初始检查 onboarding 状态
   useEffect(() => {
     // Skip if not authenticated, no token, or already checked
     if (!isAuthenticated || !token || hasCheckedOnboarding) return;
@@ -210,65 +210,75 @@ function AuthenticatedHome() {
       }
     };
 
-    checkOnboardingAndFetchResult().then((initialStatus) => {
-      // 只有在研究还在进行中时才启动轮询
-      // 如果状态已经是 completed 或 failed，不启动轮询
-      if (isAuthenticated && token && initialStatus?.researchStatus === 'running') {
-        // 清除之前的轮询（如果存在）
-        if (pollIntervalRef.current) {
-          clearInterval(pollIntervalRef.current);
-        }
-        
-        pollIntervalRef.current = setInterval(async () => {
-          try {
-            const status = await apiClient.getOnboardingStatus();
-            setOnboardingStatus(status);
-            
-            // 根据状态更新 deepResearchStatus
-            if (status.researchStatus === 'completed') {
-              setDeepResearchStatus("completed");
-              // 如果已完成且有 interactionId，尝试获取结果
-              if (status.researchInteractionId) {
-                const resultFetched = localStorage.getItem(
-                  `seenos_research_result_fetched_${status.researchInteractionId}`
-                );
-                if (!resultFetched) {
-                  try {
-                    const result = await apiClient.getDeepResearchResult(status.researchInteractionId);
-                    if (result.status === "completed" && result.onsite && result.offsite) {
-                      localStorage.setItem(
-                        `seenos_research_result_fetched_${status.researchInteractionId}`,
-                        "true"
-                      );
-                      toast.success("Deep Research completed", {
-                        description: "Brand analysis data has been loaded.",
-                      });
-                    }
-                  } catch (error) {
-                    console.error("Failed to fetch research result:", error);
+    checkOnboardingAndFetchResult();
+  }, [isAuthenticated, token, hasCheckedOnboarding, setDeepResearchStatus, setOnboardingStatus]);
+
+  // 独立的轮询逻辑：基于 onboardingStatus 的状态来决定是否轮询
+  useEffect(() => {
+    if (!isAuthenticated || !token) return;
+    
+    // 只有在研究还在进行中时才启动轮询
+    if (onboardingStatus?.researchStatus === 'running') {
+      // 清除之前的轮询（如果存在）
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+      
+      pollIntervalRef.current = setInterval(async () => {
+        try {
+          const status = await apiClient.getOnboardingStatus();
+          setOnboardingStatus(status);
+          
+          // 根据状态更新 deepResearchStatus
+          if (status.researchStatus === 'completed') {
+            setDeepResearchStatus("completed");
+            // 如果已完成且有 interactionId，尝试获取结果
+            if (status.researchInteractionId) {
+              const resultFetched = localStorage.getItem(
+                `seenos_research_result_fetched_${status.researchInteractionId}`
+              );
+              if (!resultFetched) {
+                try {
+                  const result = await apiClient.getDeepResearchResult(status.researchInteractionId);
+                  if (result.status === "completed" && result.onsite && result.offsite) {
+                    localStorage.setItem(
+                      `seenos_research_result_fetched_${status.researchInteractionId}`,
+                      "true"
+                    );
+                    toast.success("Deep Research completed", {
+                      description: "Brand analysis data has been loaded.",
+                    });
                   }
+                } catch (error) {
+                  console.error("Failed to fetch research result:", error);
                 }
               }
-              // 完成后停止轮询
-              if (pollIntervalRef.current) {
-                clearInterval(pollIntervalRef.current);
-                pollIntervalRef.current = null;
-              }
-            } else if (status.researchStatus === 'failed') {
-              setDeepResearchStatus("failed");
-              if (pollIntervalRef.current) {
-                clearInterval(pollIntervalRef.current);
-                pollIntervalRef.current = null;
-              }
-            } else if (status.researchStatus === 'running') {
-              setDeepResearchStatus("loading");
             }
-          } catch (error) {
-            console.error("Failed to poll onboarding status:", error);
+            // 完成后停止轮询
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current);
+              pollIntervalRef.current = null;
+            }
+          } else if (status.researchStatus === 'failed') {
+            setDeepResearchStatus("failed");
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current);
+              pollIntervalRef.current = null;
+            }
+          } else if (status.researchStatus === 'running') {
+            setDeepResearchStatus("loading");
           }
-        }, 3000); // 每 3 秒轮询一次
+        } catch (error) {
+          console.error("Failed to poll onboarding status:", error);
+        }
+      }, 3000); // 每 3 秒轮询一次
+    } else {
+      // 如果状态不是 running，停止轮询
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
       }
-    });
+    }
     
     return () => {
       if (pollIntervalRef.current) {
@@ -276,7 +286,7 @@ function AuthenticatedHome() {
         pollIntervalRef.current = null;
       }
     };
-  }, [isAuthenticated, token, hasCheckedOnboarding, setDeepResearchStatus, setOnboardingStatus]);
+  }, [isAuthenticated, token, onboardingStatus?.researchStatus, setDeepResearchStatus, setOnboardingStatus]);
 
   const handleLogout = useCallback(async () => {
     await logout();

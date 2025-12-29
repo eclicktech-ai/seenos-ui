@@ -390,7 +390,7 @@ export const skillFormConfigs: Record<string, SkillFormConfig> = {
   },
 
   // Internal Linking Optimizer
-  'internal-linking-optimizer': {
+  'link-optimizer': {
     fields: [
       {
         key: 'pageToOptimize',
@@ -412,7 +412,7 @@ export const skillFormConfigs: Record<string, SkillFormConfig> = {
   },
 
   // Meta Tags Optimizer
-  'meta-tags-optimizer': {
+  'meta-tags': {
     fields: [
       {
         key: 'pageUrl',
@@ -475,7 +475,7 @@ export const skillFormConfigs: Record<string, SkillFormConfig> = {
   },
 
   // Technical SEO Checker
-  'technical-seo-checker': {
+  'technical-seo': {
     fields: [
       {
         key: 'targetUrl',
@@ -503,7 +503,7 @@ export const skillFormConfigs: Record<string, SkillFormConfig> = {
   },
 
   // Backlink Analyzer
-  'backlink-analyzer': {
+  'backlink-monitor': {
     fields: [
       {
         key: 'domainOrUrl',
@@ -539,7 +539,7 @@ export const skillFormConfigs: Record<string, SkillFormConfig> = {
   },
 
   // Performance Reporter
-  'performance-reporter': {
+  'performance-monitor': {
     fields: [
       {
         key: 'siteUrl',
