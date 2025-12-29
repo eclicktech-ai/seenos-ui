@@ -10,6 +10,7 @@ export { CreatorsForm } from "./CreatorsForm";
 export { CoverageForm } from "./CoverageForm";
 export { ProductsServicesForm } from "./ProductsServicesForm";
 export { LandingPagesForm } from "./LandingPagesForm";
+export { ResourcesForm } from "./ResourcesForm";
 // 通用组件
 export { SimpleItemListForm } from "./SimpleItemListForm";
 export { PlatformSelectForm } from "./PlatformSelectForm";

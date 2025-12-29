@@ -40,6 +40,7 @@ import {
   CoverageForm,
   ProductsServicesForm,
   LandingPagesForm,
+  ResourcesForm,
   SimpleItemListForm,
   PlatformSelectForm,
   DualFieldForm,
@@ -848,6 +849,22 @@ export function ContextEditDialog({
         }
       }
 
+      // Helper function to clean up redundant fields from extra for resources
+      const cleanResourcesExtra = (item: ContextItem, section: string): Record<string, any> => {
+        if (section !== "resources") {
+          return item.extra || {};
+        }
+        const extra = { ...(item.extra || {}) };
+        // Remove redundant fields that are already in main fields
+        delete extra.url;
+        delete extra.title;
+        delete extra.section;
+        delete extra.category;
+        delete extra.description;
+        // Keep non-redundant fields like resourceType, etc.
+        return extra;
+      };
+
       // 2. Process creations
       for (const item of pendingCreations) {
         try {
@@ -861,7 +878,7 @@ export function ContextEditDialog({
               url: contextItem.url || null,
               image_url: contextItem.image_url || null,
               notes: contextItem.notes || null,
-              extra: contextItem.extra || {},
+              extra: cleanResourcesExtra(contextItem, config.section),
             };
             await apiClient.createItem(createData);
           } else if (config.dataType === "persons") {
@@ -922,7 +939,7 @@ export function ContextEditDialog({
               url: contextItem.url || null,
               image_url: contextItem.image_url || null,
               notes: contextItem.notes || null,
-              extra: contextItem.extra || {},
+              extra: cleanResourcesExtra(contextItem, config.section),
             };
             await apiClient.updateItem(item.id, updateData);
           } else if (config.dataType === "persons") {
@@ -1689,8 +1706,19 @@ export function ContextEditDialog({
               />
             </ScrollArea>
           );
-        case "key_pages":
         case "resources":
+          return (
+            <ScrollArea className="h-[500px]">
+              <ResourcesForm
+                items={itemsList}
+                onAdd={handleAdd}
+                onUpdate={handleUpdate}
+                onDelete={handleDelete}
+                label={config.label}
+              />
+            </ScrollArea>
+          );
+        case "key_pages":
         case "blog_posts":
         case "sitemap_urls":
         case "header_links":

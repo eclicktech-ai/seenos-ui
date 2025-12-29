@@ -37,12 +37,12 @@ export const SECTION_MAPPING: Record<string, SectionConfig> = {
   'Hero Section': { section: 'hero_headline', category: 'onsite', dataType: 'singleton', label: 'Hero Section' },
 
   // Pages
-  'Core Pages': { section: 'key_pages', category: 'onsite', dataType: 'items', label: 'Core Pages' },
-  'Product Pages': { section: 'key_pages', category: 'onsite', dataType: 'items', label: 'Product Pages' },
+  'Core Pages': { section: 'core_pages', category: 'onsite', dataType: 'items', label: 'Core Pages' },
+  'Product Pages': { section: 'product_pages', category: 'onsite', dataType: 'items', label: 'Product Pages' },
   'Resources': { section: 'resources', category: 'onsite', dataType: 'items', label: 'Resources' },
-  'Legal & Updates': { section: 'key_pages', category: 'onsite', dataType: 'items', label: 'Legal & Updates' },
-  'Key Website Pages': { section: 'key_pages', category: 'onsite', dataType: 'items', label: 'Key Website Pages' },
-  'Key Pages': { section: 'key_pages', category: 'onsite', dataType: 'items', label: 'Key Pages' },
+  'Legal & Updates': { section: 'core_pages', category: 'onsite', dataType: 'items', label: 'Legal & Updates' },
+  'Key Website Pages': { section: 'core_pages', category: 'onsite', dataType: 'items', label: 'Key Website Pages' },
+  'Key Pages': { section: 'core_pages', category: 'onsite', dataType: 'items', label: 'Key Pages' },
   'Landing Pages': { section: 'landing_pages', category: 'onsite', dataType: 'items', label: 'Landing Pages' },
   'Blog & Resources': { section: 'blog_posts', category: 'onsite', dataType: 'items', label: 'Blog & Resources' },
   'Blog Posts': { section: 'blog_posts', category: 'onsite', dataType: 'items', label: 'Blog Posts' },
