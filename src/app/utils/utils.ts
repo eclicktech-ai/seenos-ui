@@ -149,19 +149,6 @@ function findJsonObjectEnd(content: string): number {
   return -1;
 }
 
-/**
- * 检查字符串是否是 JSON 对象
- */
-function isJsonObject(str: string): boolean {
-  const trimmed = str.trim();
-  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return false;
-  try {
-    JSON.parse(trimmed);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 // 通用消息类型（兼容 LangGraph 和自定义格式）
 type MessageLike = {

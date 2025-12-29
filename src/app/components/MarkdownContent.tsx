@@ -6,12 +6,14 @@ import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { cn } from "@/lib/utils";
-import { Copy, Check, ExternalLink, ZoomIn } from "lucide-react";
+import { Copy, Check, ExternalLink, ZoomIn, Download, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { apiClient } from "@/lib/api/client";
 
 interface MarkdownContentProps {
   content: string;
   className?: string;
+  cid?: string | null; // 对话 ID，用于下载文件
 }
 
 // 预处理 Markdown 内容，修复常见问题
@@ -442,11 +444,54 @@ const CopyButton = React.memo<{ code: string }>(({ code }) => {
 CopyButton.displayName = "CopyButton";
 
 export const MarkdownContent = React.memo<MarkdownContentProps>(
-  ({ content, className = "" }) => {
+  ({ content, className = "", cid }) => {
     const [previewImage, setPreviewImage] = useState<{ src: string; alt: string } | null>(null);
+    const [downloadingUrl, setDownloadingUrl] = useState<string | null>(null);
 
     // 检测当前主题
     const isDark = typeof window !== "undefined" && document.documentElement.classList.contains("dark");
+
+    // 从 S3 URL 提取 cid 和文件路径
+    const extractS3FileInfo = useCallback((url: string): { cid: string; path: string } | null => {
+      const s3Pattern = /https?:\/\/seenos-context\.s3\.amazonaws\.com\/agent-files\/([^/]+)\/(.+)/;
+      const match = url.match(s3Pattern);
+      if (match) {
+        return {
+          cid: match[1],
+          path: match[2],
+        };
+      }
+      return null;
+    }, []);
+
+    // 处理文件下载
+    const handleFileDownload = useCallback(async (e: React.MouseEvent, url: string) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      // 尝试从 URL 提取 cid 和 path
+      const s3Info = extractS3FileInfo(url);
+      const fileCid = cid || s3Info?.cid;
+      const filePath = s3Info?.path;
+
+      if (!fileCid || !filePath) {
+        // 如果无法提取信息，回退到直接下载
+        window.open(url, '_blank');
+        return;
+      }
+
+      setDownloadingUrl(url);
+      try {
+        const filename = filePath.split('/').pop() || 'download';
+        await apiClient.downloadConversationFile(fileCid, filePath, filename);
+      } catch (error) {
+        console.error('Failed to download file:', error);
+        // 如果 API 下载失败，回退到直接打开链接
+        window.open(url, '_blank');
+      } finally {
+        setDownloadingUrl(null);
+      }
+    }, [cid, extractS3FileInfo]);
 
     return (
       <>
@@ -578,6 +623,25 @@ export const MarkdownContent = React.memo<MarkdownContentProps>(
                     (href.includes('oauth') && href.includes('google'))
                   ));
                 
+                // 检测是否是 S3 下载链接
+                const isS3DownloadLink = href && (
+                  href.includes('seenos-context.s3.amazonaws.com') ||
+                  href.includes('agent-files')
+                );
+                
+                // 检测是否是下载链接（DOCX、PDF等文件或包含download关键词）
+                const isDownloadLink = 
+                  (href && (
+                    href.match(/\.(docx|pdf|doc|xlsx|xls|ppt|pptx|zip|rar|tar|gz)$/i) ||
+                    href.includes('download') ||
+                    href.includes('/download/')
+                  )) ||
+                  (linkText && (
+                    linkText.includes('download') ||
+                    linkText.includes('serp analysis docx') ||
+                    linkText.includes('download serp')
+                  ));
+                
                 // 如果是 GSC 授权链接，渲染为灰色按钮
                 if (isGSCAuthLink) {
                   return (
@@ -595,6 +659,50 @@ export const MarkdownContent = React.memo<MarkdownContentProps>(
                       >
                         {children}
                         {isExternal && <ExternalLink size={14} />}
+                      </a>
+                    </Button>
+                  );
+                }
+                
+                // 如果是 S3 下载链接，使用 API 下载（不跳转页面）
+                if (isS3DownloadLink && href) {
+                  const isDownloading = downloadingUrl === href;
+                  return (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="mt-2 inline-flex items-center gap-1.5"
+                      onClick={(e) => handleFileDownload(e, href)}
+                      disabled={isDownloading}
+                    >
+                      {isDownloading ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Download size={14} />
+                      )}
+                      {children}
+                    </Button>
+                  );
+                }
+                
+                // 如果是其他下载链接，渲染为下载按钮
+                if (isDownloadLink) {
+                  return (
+                    <Button
+                      asChild
+                      variant="default"
+                      size="sm"
+                      className="mt-2 inline-flex items-center gap-1.5"
+                    >
+                      <a
+                        href={href}
+                        download
+                        target={isExternal ? "_blank" : undefined}
+                        rel={isExternal ? "noopener noreferrer" : undefined}
+                        className="inline-flex items-center gap-1.5"
+                      >
+                        <Download size={14} />
+                        {children}
                       </a>
                     </Button>
                   );

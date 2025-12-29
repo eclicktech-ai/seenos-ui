@@ -2,7 +2,7 @@
 
 import React, { useMemo, useCallback, useState, useEffect } from "react";
 import { FileText, Copy, Download, Edit, Save, X, Loader2, Plus, Trash2, Table, Code, GitCompare } from "lucide-react";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -402,6 +402,8 @@ export const FileViewDialog = React.memo<{
   const [fileContent, setFileContent] = useState(String(file?.content || ""));
   const [csvData, setCsvData] = useState<string[][]>([]);
   const [viewMode, setViewMode] = useState<'table' | 'raw' | 'diff'>('table');
+  const [previewError, setPreviewError] = useState(false);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(true);
   
   // 检查是否有 diff 数据
   const hasDiff = !!file?.oldContent;
@@ -422,10 +424,13 @@ export const FileViewDialog = React.memo<{
     setFileName(String(file?.path || ""));
     setFileContent(String(file?.content || ""));
     setIsEditingMode(file === null);
+    setPreviewError(false); // 重置预览错误状态
+    setIsPreviewLoading(true); // 重置加载状态
+    
     // 解析 CSV 数据
     const ext = String(file?.path || "").split(".").pop()?.toLowerCase();
-    if (ext === 'csv') {
-      setCsvData(parseCSV(String(file?.content || "")));
+    if (ext === 'csv' && file?.content) {
+      setCsvData(parseCSV(String(file.content)));
     }
     // 如果有 diff 数据，默认显示 diff 视图
     if (file?.oldContent) {
@@ -434,6 +439,21 @@ export const FileViewDialog = React.memo<{
       setViewMode('table');
     } else {
       setViewMode('raw');
+    }
+    
+    // 对于文档文件，设置超时检测预览是否成功
+    const documentExtensions = ['docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt', 'pdf'];
+    if (file?.downloadUrl && ext && documentExtensions.includes(ext)) {
+      const timeout = setTimeout(() => {
+        // 8秒后如果还在加载，可能预览失败
+        console.warn('[FileViewDialog] Preview timeout, showing error');
+        setPreviewError(true);
+        setIsPreviewLoading(false);
+      }, 8000);
+      
+      return () => clearTimeout(timeout);
+    } else {
+      setIsPreviewLoading(false);
     }
   }, [file]);
 
@@ -448,6 +468,12 @@ export const FileViewDialog = React.memo<{
 
   const isMarkdown = useMemo(() => {
     return fileExtension === "md" || fileExtension === "markdown";
+  }, [fileExtension]);
+
+  const isDocument = useMemo(() => {
+    // 支持预览的文档类型（使用在线预览服务，支持 S3 URL）
+    const documentExtensions = ['docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt', 'pdf'];
+    return documentExtensions.includes(fileExtension);
   }, [fileExtension]);
 
   const language = useMemo(() => {
@@ -466,6 +492,19 @@ export const FileViewDialog = React.memo<{
   }, [fileContent]);
 
   const handleDownload = useCallback(() => {
+    // 如果是二进制文件，直接使用downloadUrl下载
+    if (file?.isBinary && file?.downloadUrl) {
+      const a = document.createElement("a");
+      a.href = file.downloadUrl;
+      a.download = fileName || file.path.split('/').pop() || 'download';
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
+    
+    // 文本文件：创建blob下载
     if (fileContent && fileName) {
       const blob = new Blob([fileContent], { type: "text/plain" });
       const url = URL.createObjectURL(blob);
@@ -477,7 +516,7 @@ export const FileViewDialog = React.memo<{
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }
-  }, [fileContent, fileName]);
+  }, [fileContent, fileName, file]);
 
   const handleEdit = useCallback(() => {
     setIsEditingMode(true);
@@ -515,6 +554,9 @@ export const FileViewDialog = React.memo<{
         <DialogTitle className="sr-only">
           {file?.path || "New File"}
         </DialogTitle>
+        <DialogDescription className="sr-only">
+          {file?.isBinary ? 'Binary file viewer' : 'File content viewer'}
+        </DialogDescription>
         <div className="mb-4 flex items-center justify-between border-b border-gray-200 pb-4">
           <div className="flex min-w-0 items-center gap-2">
             <FileText className="h-5 w-5 shrink-0 text-gray-500" />
@@ -571,31 +613,35 @@ export const FileViewDialog = React.memo<{
             )}
             {!isEditingMode && (
               <>
-                <Button
-                  onClick={handleEdit}
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 px-3 text-gray-600 hover:bg-gray-100 hover:text-gray-800"
-                  disabled={editDisabled}
-                >
-                  <Edit
-                    size={16}
-                    className="mr-1"
-                  />
-                  Edit
-                </Button>
-                <Button
-                  onClick={handleCopy}
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 px-3 text-gray-600 hover:bg-gray-100 hover:text-gray-800"
-                >
-                  <Copy
-                    size={16}
-                    className="mr-1"
-                  />
-                  Copy
-                </Button>
+                {!file?.isBinary && (
+                  <>
+                    <Button
+                      onClick={handleEdit}
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-3 text-gray-600 hover:bg-gray-100 hover:text-gray-800"
+                      disabled={editDisabled}
+                    >
+                      <Edit
+                        size={16}
+                        className="mr-1"
+                      />
+                      Edit
+                    </Button>
+                    <Button
+                      onClick={handleCopy}
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-3 text-gray-600 hover:bg-gray-100 hover:text-gray-800"
+                    >
+                      <Copy
+                        size={16}
+                        className="mr-1"
+                      />
+                      Copy
+                    </Button>
+                  </>
+                )}
                 <Button
                   onClick={handleDownload}
                   variant="ghost"
@@ -644,7 +690,146 @@ export const FileViewDialog = React.memo<{
           ) : (
             <ScrollArea className="h-full rounded-md bg-gray-50">
               <div className="p-4">
-                {fileContent ? (
+                {file?.isBinary && file?.downloadUrl ? (
+                  // 二进制文件：显示预览和下载
+                  <div className="flex h-full flex-col">
+                    {isDocument && !previewError ? (
+                      // 文档文件：显示预览iframe
+                      <div className="flex h-full flex-col">
+                        <div className="mb-2 flex items-center justify-between rounded-lg bg-gray-50 p-3">
+                          <div className="flex items-center gap-2">
+                            <FileText size={20} className="text-gray-500" />
+                            <span className="text-sm font-medium text-gray-700">
+                              {file.path.split('/').pop()}
+                            </span>
+                            {file.fileSize && (
+                              <span className="text-xs text-gray-500">
+                                ({(file.fileSize / 1024).toFixed(2)} KB)
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              onClick={() => window.open(file.downloadUrl, '_blank')}
+                              variant="outline"
+                              size="sm"
+                              className="border-gray-300"
+                            >
+                              Open in New Tab
+                            </Button>
+                            <Button
+                              onClick={handleDownload}
+                              size="sm"
+                              className="bg-teal-600 text-white hover:bg-teal-700"
+                            >
+                              <Download size={16} className="mr-2" />
+                              Download
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="flex-1 overflow-hidden rounded-lg border border-gray-200 bg-white relative">
+                          {isPreviewLoading && !previewError ? (
+                            // 加载中状态
+                            <div className="flex h-full items-center justify-center">
+                              <div className="text-center">
+                                <Loader2 className="mx-auto mb-4 h-8 w-8 animate-spin text-gray-400" />
+                                <p className="text-sm text-gray-500">Loading preview...</p>
+                              </div>
+                            </div>
+                          ) : fileExtension === 'pdf' ? (
+                            // PDF文件：直接嵌入
+                            <iframe
+                              src={file.downloadUrl}
+                              className="h-full w-full"
+                              title="PDF Preview"
+                              style={{ border: 'none' }}
+                              onError={() => {
+                                setPreviewError(true);
+                                setIsPreviewLoading(false);
+                              }}
+                              onLoad={() => {
+                                setIsPreviewLoading(false);
+                                setPreviewError(false);
+                              }}
+                            />
+                          ) : fileExtension === 'docx' || fileExtension === 'doc' ? (
+                            // Word 文档：使用 Google Docs Viewer（支持 S3 URL）
+                            <iframe
+                              src={`https://docs.google.com/viewer?url=${encodeURIComponent(file.downloadUrl)}&embedded=true`}
+                              className="h-full w-full"
+                              title="Document Preview"
+                              style={{ border: 'none' }}
+                              onError={() => {
+                                console.warn('[FileViewDialog] Google Docs Viewer failed for:', file.downloadUrl);
+                                setPreviewError(true);
+                                setIsPreviewLoading(false);
+                              }}
+                              onLoad={() => {
+                                setIsPreviewLoading(false);
+                                setPreviewError(false);
+                              }}
+                            />
+                          ) : (
+                            // 其他 Office 文档：使用 Office Online Viewer
+                            <iframe
+                              src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(file.downloadUrl)}`}
+                              className="h-full w-full"
+                              title="Document Preview"
+                              style={{ border: 'none' }}
+                              onError={() => {
+                                setPreviewError(true);
+                                setIsPreviewLoading(false);
+                              }}
+                              onLoad={() => {
+                                setIsPreviewLoading(false);
+                                setPreviewError(false);
+                              }}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      // 其他二进制文件或预览失败：显示下载链接
+                      <div className="flex flex-col items-center justify-center p-12">
+                        <div className="mb-4 rounded-lg bg-gray-100 p-6 text-center">
+                          <FileText size={48} className="mx-auto mb-4 text-gray-400" />
+                          <p className="mb-2 text-sm font-medium text-gray-700">
+                            {previewError && isDocument ? 'Preview Unavailable' : 'Binary File'}
+                          </p>
+                          <p className="mb-4 text-xs text-gray-500">
+                            {file.fileSize ? `Size: ${(file.fileSize / 1024).toFixed(2)} KB` : 'This is a binary file'}
+                            {previewError && isDocument && (
+                              <span className="block mt-2 text-orange-600">
+                                Preview is not available. Please download to view.
+                              </span>
+                            )}
+                          </p>
+                          <div className="flex gap-2 justify-center">
+                            {previewError && isDocument && (
+                              <Button
+                                onClick={() => {
+                                  setPreviewError(false);
+                                  window.open(file.downloadUrl, '_blank');
+                                }}
+                                variant="outline"
+                                className="border-gray-300"
+                              >
+                                Open in New Tab
+                              </Button>
+                            )}
+                            <Button
+                              onClick={handleDownload}
+                              className="bg-teal-600 text-white hover:bg-teal-700"
+                            >
+                              <Download size={16} className="mr-2" />
+                              Download File
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : fileContent ? (
                   viewMode === 'diff' && hasDiff ? (
                     // Diff 视图
                     <DiffView

@@ -81,12 +81,10 @@ export function useChat(options: UseChatOptions = {}) {
   });
 
   // 转换文件格式
-  const convertFilesToStrings = useCallback((files: Record<string, FileItem | string>): Record<string, string> => {
-    const result: Record<string, string> = {};
-    for (const [path, file] of Object.entries(files)) {
-      result[path] = typeof file === 'string' ? file : file.content;
-    }
-    return result;
+  const convertFilesToStrings = useCallback((files: Record<string, FileItem | string>): Record<string, string | FileItem> => {
+    // 直接返回，支持 FileItem 对象（包括二进制文件）
+    // setInitialState 现在支持 Record<string, string | FileItem>
+    return files;
   }, []);
 
   // 渐进加载消息 - 逐条显示历史消息
@@ -422,13 +420,10 @@ export function useChat(options: UseChatOptions = {}) {
     stream.reconnect();
   }, [stream]);
 
-  // 文件格式转换
-  const filesAsStrings = useMemo(() => {
-    const result: Record<string, string> = {};
-    for (const [path, file] of Object.entries(stream.files)) {
-      result[path] = file.content;
-    }
-    return result;
+  // 文件格式转换 - 返回完整的文件对象（包括二进制文件）
+  const filesForDisplay = useMemo(() => {
+    // 直接返回 stream.files，包含所有文件（文本和二进制）
+    return stream.files;
   }, [stream.files]);
 
   // 更新文件（保存到后端）
@@ -452,7 +447,7 @@ export function useChat(options: UseChatOptions = {}) {
     // 状态
     messages: stream.messages,
     todos: stream.todos,
-    files: filesAsStrings,
+    files: filesForDisplay, // 返回完整的文件对象（包括二进制文件）
     interrupt: stream.interrupt,
     isLoading: stream.isLoading || isCreating,
     isLoadingHistory,

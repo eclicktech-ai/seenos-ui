@@ -173,11 +173,15 @@ export interface TodoItem {
 // ============ 文件 ============
 export interface FileItem {
   path: string;
-  content: string;
+  content?: string;                // 文本内容（对于二进制文件可能为空）
   language?: string;
   editable?: boolean;              // 是否可编辑
   lastModified?: string;           // 最后修改时间 (ISO)
   updatedAt?: Date;                // 兼容旧格式
+  // 二进制文件相关
+  isBinary?: boolean;              // 是否为二进制文件
+  downloadUrl?: string;            // 二进制文件的下载 URL
+  fileSize?: number;               // 文件大小（字节）
   // 编辑相关
   lineStart?: number;              // 编辑起始行
   lineEnd?: number;                // 编辑结束行

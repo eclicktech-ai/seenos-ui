@@ -459,6 +459,43 @@ class ApiClient {
     return this.put(`/conversations/${cid}/files`, { files });
   }
 
+  /** 下载对话文件 */
+  async downloadConversationFile(cid: string, path: string, filename?: string): Promise<void> {
+    const headers: HeadersInit = {};
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
+
+    const url = `${this.baseUrl}/conversations/${cid}/files/download?path=${encodeURIComponent(path)}`;
+    const response = await fetch(url, { headers });
+
+    if (!response.ok) {
+      let errorData: { error?: { code?: string; message?: string }; message?: string; detail?: string } = {};
+      try {
+        errorData = await response.json();
+      } catch {
+        // 忽略 JSON 解析错误
+      }
+      const errorMessage = errorData.error?.message || errorData.message || errorData.detail || `HTTP ${response.status}`;
+      const error: ApiError = new Error(errorMessage);
+      error.code = errorData.error?.code;
+      error.status = response.status;
+      throw error;
+    }
+
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    
+    // 触发下载
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename || path.split('/').pop() || 'download';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+  }
+
   /** 继续对话 */
   async continueConversation(cid: string): Promise<void> {
     return this.post(`/conversations/${cid}/continue`);

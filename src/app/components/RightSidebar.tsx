@@ -78,7 +78,7 @@ export const RightSidebar = React.memo<RightSidebarProps>(
         // Convert files to Record<string, string> format
         const filesAsStrings: Record<string, string> = {};
         for (const [key, value] of Object.entries(files)) {
-          filesAsStrings[key] = typeof value === "string" ? value : value.content;
+          filesAsStrings[key] = typeof value === "string" ? value : (value.content || "");
         }
         await setFiles({ ...filesAsStrings, [fileName]: content });
         setSelectedFile({ path: fileName, content: content });
@@ -151,21 +151,33 @@ ${customInstructions ? `Custom Instructions:\n${customInstructions}` : ''}`;
       if (visibleFiles.length === 0) return;
 
       visibleFiles.forEach((filePath) => {
-        const fileContent = getFileContent(filePath);
+        const rawFile = files[filePath];
         const fileName = filePath.split("/").pop() || filePath;
         
-        // Create a blob and download
-        const blob = new Blob([fileContent], { type: "text/plain" });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+        // 如果是二进制文件，直接使用 downloadUrl
+        if (typeof rawFile === "object" && rawFile !== null && "isBinary" in rawFile && (rawFile as FileItem).isBinary && (rawFile as FileItem).downloadUrl) {
+          const link = document.createElement("a");
+          link.href = (rawFile as FileItem).downloadUrl!;
+          link.download = fileName;
+          link.target = '_blank';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        } else {
+          // 文本文件：创建 blob 下载
+          const fileContent = getFileContent(filePath);
+          const blob = new Blob([fileContent], { type: "text/plain" });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = fileName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        }
       });
-    }, [visibleFiles, getFileContent]);
+    }, [visibleFiles, getFileContent, files]);
 
     return (
       <div className="flex h-full flex-col p-2 pl-0">
@@ -229,13 +241,22 @@ ${customInstructions ? `Custom Instructions:\n${customInstructions}` : ''}`;
                 <ScrollArea className="h-full px-4 py-4">
                   <div className="space-y-1">
                     {visibleFiles.map((filePath) => {
-                      const fileContent = getFileContent(filePath);
+                      const rawFile = files[filePath];
                       const fileName = filePath.split("/").pop() || filePath;
 
-                      const fileItem: FileItem = {
-                        path: filePath,
-                        content: fileContent,
-                      };
+                      // 处理文件项：支持字符串格式和 FileItem 对象格式
+                      let fileItem: FileItem;
+                      if (typeof rawFile === "object" && rawFile !== null && "path" in rawFile) {
+                        // 已经是 FileItem 格式（可能是二进制文件）
+                        fileItem = rawFile as FileItem;
+                      } else {
+                        // 字符串格式或包含 content 的对象
+                        const fileContent = getFileContent(filePath);
+                        fileItem = {
+                          path: filePath,
+                          content: fileContent,
+                        };
+                      }
 
                       const fileExt = getFileExtension(fileName);
 

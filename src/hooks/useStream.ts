@@ -86,7 +86,7 @@ type StreamAction =
   | { type: 'SET_LOADING'; isLoading: boolean }
   | { type: 'RESET' }
   | { type: 'RESET_CONVERSATION' }  // 只重置会话，保留连接
-  | { type: 'SET_INITIAL_STATE'; messages: Message[]; todos: TodoItem[]; files: Record<string, string> }
+  | { type: 'SET_INITIAL_STATE'; messages: Message[]; todos: TodoItem[]; files: Record<string, string | FileItem> }
   | { type: 'ADD_USER_MESSAGE'; messageId: string; content: string; cid: string }  // 添加 cid
   | { type: 'MESSAGE_START'; messageId: string; cid: string; role: string; parentMessageId?: string; subagentName?: string }
   | { type: 'MESSAGE_DELTA'; messageId: string; delta: string }
@@ -212,30 +212,52 @@ function streamReducer(state: StreamState, action: StreamAction): StreamState {
       const files: Record<string, FileItem> = {};
       for (const [path, content] of Object.entries(action.files)) {
         // 支持多种格式：字符串、FileItem 对象、或包含 content 的对象
-        let fileContent = '';
-        let language = 'text';
-        
         if (typeof content === 'string') {
-          fileContent = content;
+          // 旧格式：直接是字符串内容
+          files[path] = {
+            path,
+            content,
+            language: 'text',
+            editable: true,
+          };
         } else if (content && typeof content === 'object') {
-          const contentObj = content as Record<string, unknown>;
+          // 新格式：FileItem 对象或包含文件信息的对象
+          const contentObj = content as FileItem | Record<string, unknown>;
+          
+          // 检查是否已经是 FileItem 格式（有 path 字段）
+          if ('path' in contentObj && typeof contentObj.path === 'string') {
+            // 已经是 FileItem 格式，直接使用
+            files[path] = contentObj as FileItem;
+          } else {
+            // 需要转换的对象格式
+            let fileContent: string | undefined;
+            let language = 'text';
+            
           // 尝试从不同字段获取内容
           if (typeof contentObj.content === 'string') {
             fileContent = contentObj.content;
           } else if (Array.isArray(contentObj.content)) {
             fileContent = contentObj.content.join('\n');
           }
+            
           if (typeof contentObj.language === 'string') {
             language = contentObj.language;
-          }
         }
+            
+            // 检查是否是二进制文件
+            const isBinary = contentObj.isBinary === true || contentObj.downloadUrl !== undefined;
         
         files[path] = {
           path,
           content: fileContent,
           language,
-          editable: true,
+              editable: !isBinary, // 二进制文件不可编辑
+              isBinary: isBinary ? true : undefined,
+              downloadUrl: typeof contentObj.downloadUrl === 'string' ? contentObj.downloadUrl : undefined,
+              fileSize: typeof contentObj.fileSize === 'number' ? contentObj.fileSize : undefined,
         };
+          }
+        }
       }
       
       // 从历史消息的 tool_calls 中提取文件
@@ -634,18 +656,39 @@ export function useStream(options: UseStreamOptions) {
         
         if (data.messages) {
           // 转换 files 为正确格式
-          const normalizedFiles: Record<string, string> = {};
+          // 支持字符串格式（旧格式）和 FileItem 对象格式（新格式，包括二进制文件）
+          const normalizedFiles: Record<string, string | FileItem> = {};
           if (data.files) {
             for (const [path, value] of Object.entries(data.files)) {
               if (typeof value === 'string') {
+                // 旧格式：直接是字符串内容
                 normalizedFiles[path] = value;
               } else if (value && typeof value === 'object') {
-                // 可能是 { content: string } 格式
                 const obj = value as Record<string, unknown>;
-                if (typeof obj.content === 'string') {
+                // 检查是否是二进制文件（有 downloadUrl 或 isBinary 为 true）
+                if (obj.downloadUrl || obj.isBinary === true) {
+                  // 二进制文件：保存为 FileItem 对象
+                  normalizedFiles[path] = {
+                    path,
+                    content: typeof obj.content === 'string' ? obj.content : undefined,
+                    language: typeof obj.language === 'string' ? obj.language : undefined,
+                    isBinary: true,
+                    downloadUrl: typeof obj.downloadUrl === 'string' ? obj.downloadUrl : undefined,
+                    fileSize: typeof obj.fileSize === 'number' ? obj.fileSize : undefined,
+                    editable: false, // 二进制文件不可编辑
+                  };
+                } else if (typeof obj.content === 'string') {
+                  // 文本文件：提取 content 字符串（保持向后兼容）
                   normalizedFiles[path] = obj.content;
+                } else if (Array.isArray(obj.content)) {
+                  // 内容可能是数组格式
+                  normalizedFiles[path] = obj.content.join('\n');
                 } else {
+                  // 未知格式，但不一定是错误（可能是空文件或其他格式）
+                  // 只对明显异常的情况发出警告
+                  if (obj.content !== null && obj.content !== undefined) {
                   console.warn('[useStream] Unknown file format for path:', path, value);
+                  }
                 }
               }
             }
@@ -1074,7 +1117,7 @@ export function useStream(options: UseStreamOptions) {
   const setInitialState = useCallback((data: {
     messages: Message[];
     todos: TodoItem[];
-    files: Record<string, string>;
+    files: Record<string, string | FileItem>;
   }) => {
     dispatch({
       type: 'SET_INITIAL_STATE',

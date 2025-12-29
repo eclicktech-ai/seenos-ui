@@ -358,6 +358,7 @@ export const ChatMessage = React.memo<ChatMessageProps>(
                               <MarkdownContent
                                 content={extractSubAgentContent(subAgent.input)}
                                 className="text-sm"
+                                cid={(message as Message).cid}
                               />
                             </div>
                           </div>
@@ -372,6 +373,7 @@ export const ChatMessage = React.memo<ChatMessageProps>(
                                 <MarkdownContent
                                   content={extractSubAgentContent(subAgent.output)}
                                   className="text-sm"
+                                  cid={(message as Message).cid}
                                 />
                               </div>
                             </div>
@@ -456,7 +458,7 @@ export const ChatMessage = React.memo<ChatMessageProps>(
                   (hasToolCalls || subAgents.length > 0) && "mt-3"
                 )}>
                   <div className="overflow-hidden break-words rounded-2xl rounded-tl-sm bg-secondary/50 px-4 py-3 text-sm font-normal leading-[160%] text-foreground dark:bg-secondary/30">
-                    <MarkdownContent content={messageContent} />
+                    <MarkdownContent content={messageContent} cid={(message as Message).cid} />
                   </div>
                   
                   {/* Citations - 显示引用来源 */}
