@@ -160,7 +160,7 @@ export interface SubAgent {
 export interface TodoItem {
   id: string;
   content: string;
-  status: 'pending' | 'completed' | 'failed';  // 添加 failed 状态
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';  // 添加 in_progress 和 failed 状态
   createdAt?: Date;
   updatedAt?: Date;
   // FRONTEND_API_GUIDE.md 定义的额外字段
