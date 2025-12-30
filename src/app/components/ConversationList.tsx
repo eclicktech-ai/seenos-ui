@@ -478,10 +478,10 @@ export function ConversationList({
                               <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-primary" />
                             )}
                             
-                            <div className="min-w-0 pl-1">
+                            <div className="min-w-0 flex-1 overflow-hidden pl-1">
                               {/* Title + Status Row */}
-                              <div className="mb-1.5 flex items-center justify-between gap-2">
-                                <div className="flex min-w-0 items-center gap-2">
+                              <div className="mb-1.5 flex items-center justify-between gap-3">
+                                <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
                                   {/* 状态指示器 */}
                                   <div
                                     className={cn(
@@ -529,7 +529,7 @@ export function ConversationList({
                                     </form>
                                   ) : (
                                     <h3 className={cn(
-                                      "truncate text-sm font-medium",
+                                      "min-w-0 flex-1 truncate text-sm font-medium",
                                       isSelected
                                         ? "text-primary"
                                         : "text-foreground"
@@ -540,8 +540,8 @@ export function ConversationList({
                                 </div>
                                 {/* 操作按钮 - 只在非编辑模式显示 */}
                                 {editingId !== conv.cid && (
-                                  <div className="flex flex-shrink-0 items-center gap-1">
-                                    <span className="text-[11px] text-muted-foreground">
+                                  <div className="flex flex-shrink-0 items-center gap-1 whitespace-nowrap">
+                                    <span className="whitespace-nowrap text-[11px] text-muted-foreground">
                                       {formatTime(conv.updatedAt)}
                                     </span>
                                     {/* 编辑按钮 */}
@@ -579,7 +579,7 @@ export function ConversationList({
                                 )}
                               </div>
                               {/* Description Row */}
-                              <p className="line-clamp-1 pl-4 text-xs text-muted-foreground">
+                              <p className="line-clamp-1 overflow-hidden break-all pl-4 text-xs text-muted-foreground">
                                 {conv.description}
                               </p>
                             </div>

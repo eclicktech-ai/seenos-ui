@@ -500,27 +500,89 @@ function streamReducer(state: StreamState, action: StreamAction): StreamState {
       });
 
       // 从工具调用结果中提取文件内容
-      // 支持格式: { files: { "/path": { content: "...", path: "..." } } }
-      // 或: { result: { files: { ... } } }
+      // 支持多种格式:
+      // 1. { files: { "/path": { content: "...", path: "..." } } }
+      // 2. { result: { files: { ... } } }
+      // 3. { images: [{ url: "...", path: "..." }] }  // 图片生成工具
+      // 4. 二进制文件: { files: { "/path": { downloadUrl: "...", isBinary: true } } }
       let newFiles = state.files;
       const result = action.result as Record<string, unknown> | null | undefined;
+      
+      // 调试日志：查看工具调用结果结构
+      console.log('[useStream] TOOL_CALL_END -', existing?.name, '- result keys:', result ? Object.keys(result) : 'null');
+      
       if (result && typeof result === 'object') {
-        const filesData = (result.files || (result.result as Record<string, unknown>)?.files) as Record<string, unknown> | undefined;
-        if (filesData && typeof filesData === 'object') {
-          newFiles = { ...state.files };
-          for (const [filePath, fileData] of Object.entries(filesData)) {
-            if (fileData && typeof fileData === 'object') {
-              const file = fileData as Record<string, unknown>;
-              if (file.content && typeof file.content === 'string') {
-                newFiles[filePath] = {
-                  path: filePath,
-                  content: file.content,
-                  language: typeof file.language === 'string' ? file.language : undefined,
-                  editable: true,
+        // 尝试多个可能的位置提取 files
+        let filesData: Record<string, unknown> | undefined;
+        
+        // 1. result.files (直接在顶层)
+        if (result.files && typeof result.files === 'object') {
+          filesData = result.files as Record<string, unknown>;
+          console.log('[useStream] Found files in result.files');
+        }
+        // 2. result.result.files (嵌套在 result 中)
+        else if (result.result && typeof result.result === 'object') {
+          const nested = result.result as Record<string, unknown>;
+          if (nested.files && typeof nested.files === 'object') {
+            filesData = nested.files as Record<string, unknown>;
+            console.log('[useStream] Found files in result.result.files');
+          }
+        }
+        // 3. result.images (图片生成工具特殊格式)
+        else if (result.images && Array.isArray(result.images)) {
+          console.log('[useStream] Found images array:', result.images.length);
+          filesData = {};
+          for (const img of result.images) {
+            if (img && typeof img === 'object') {
+              const imgObj = img as Record<string, unknown>;
+              const url = imgObj.url || imgObj.downloadUrl;
+              const path = imgObj.path || imgObj.filename || `/generated-image-${Date.now()}.png`;
+              if (url && typeof url === 'string') {
+                filesData[path as string] = {
+                  path,
+                  downloadUrl: url,
+                  isBinary: true,
+                  language: 'image',
+                  fileSize: imgObj.fileSize,
                 };
               }
             }
           }
+        }
+        
+        if (filesData && typeof filesData === 'object' && Object.keys(filesData).length > 0) {
+          console.log('[useStream] Extracting files:', Object.keys(filesData));
+          newFiles = { ...state.files };
+          
+          for (const [filePath, fileData] of Object.entries(filesData)) {
+            if (fileData && typeof fileData === 'object') {
+              const file = fileData as Record<string, unknown>;
+              
+              // 检查是否是二进制文件（有 downloadUrl 或 isBinary 标志）
+              const hasDownloadUrl = file.downloadUrl && typeof file.downloadUrl === 'string';
+              const isBinary = file.isBinary === true || hasDownloadUrl;
+              
+              console.log(`[useStream] Processing: ${filePath}`, { isBinary, hasDownloadUrl, hasContent: !!file.content });
+              
+              // 文本文件需要有 content，二进制文件需要有 downloadUrl
+              if ((file.content && typeof file.content === 'string') || hasDownloadUrl) {
+                newFiles[filePath] = {
+                  path: filePath,
+                  content: typeof file.content === 'string' ? file.content : undefined,
+                  language: typeof file.language === 'string' ? file.language : (isBinary ? 'image' : 'text'),
+                  editable: !isBinary, // 二进制文件不可编辑
+                  isBinary: isBinary ? true : undefined,
+                  downloadUrl: hasDownloadUrl ? (file.downloadUrl as string) : undefined,
+                  fileSize: typeof file.fileSize === 'number' ? file.fileSize : undefined,
+                };
+                console.log(`[useStream] ✅ Added file to artifacts: ${filePath}`);
+              } else {
+                console.warn(`[useStream] ⚠️ Skipped file (no content/downloadUrl): ${filePath}`, file);
+              }
+              }
+            }
+        } else {
+          console.log('[useStream] No files/images found in tool result');
         }
       }
 
@@ -914,6 +976,7 @@ export function useStream(options: UseStreamOptions) {
       // 文件操作
       case 'file_operation': {
         const data = event.data as FileOperationEventData;
+        console.log('[useStream] file_operation event:', JSON.stringify(data, null, 2));
         dispatch({
           type: 'FILE_OPERATION',
           operation: data.operation,

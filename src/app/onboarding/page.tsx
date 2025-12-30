@@ -62,6 +62,7 @@ export default function OnboardingPage() {
   const faceRef = useRef<HTMLDivElement>(null);
   const [eyePosition, setEyePosition] = useState({ x: 0, y: 0 });
   const [isBlinking, setIsBlinking] = useState(false);
+  const autoCompleteRef = useRef<string>(""); // Track last auto-completed value to avoid loops
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -154,14 +155,29 @@ export default function OnboardingPage() {
     };
   }, []);
 
-  // Validate URL format
+
+  // Validate URL format - more lenient validation
   const isValidUrl = (urlString: string): boolean => {
-    try {
-      const url = new URL(urlString);
-      return url.protocol === "http:" || url.protocol === "https:";
-    } catch {
+    if (!urlString || !urlString.trim()) {
       return false;
     }
+
+    const trimmed = urlString.trim();
+    
+    // If it already has a protocol, validate with URL constructor
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+      try {
+        const url = new URL(trimmed);
+        return url.protocol === "http:" || url.protocol === "https:";
+      } catch {
+        return false;
+      }
+    }
+
+    // For URLs without protocol, use regex to validate domain format
+    // This is more lenient and works for domains like pollo.ai, seopage.ai, etc.
+    const domainPattern = /^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}(\/.*)?$/;
+    return domainPattern.test(trimmed);
   };
 
   const handleLogout = useCallback(async () => {
@@ -186,8 +202,10 @@ export default function OnboardingPage() {
         finalUrl = `https://${finalUrl}`;
       }
 
+      // More lenient validation - check if it's a valid URL format
+      // We'll rely more on backend validation for actual reachability
       if (!isValidUrl(finalUrl)) {
-        setError("Please enter a valid URL (e.g., https://example.com)");
+        setError("Please enter a valid URL (e.g., https://example.com or example.com)");
         return;
       }
 
@@ -202,14 +220,19 @@ export default function OnboardingPage() {
           throw new Error("Failed to validate URL");
         }
 
-
-        // 根据 status_code 判断
-        const isValid = validationResult.is_valid !== undefined 
-          ? validationResult.is_valid 
-          : (validationResult.status_code >= 200 && validationResult.status_code < 400);
-
-        // 只检查格式，不检查可达性（因为有些网站可能有防爬虫机制）
-        if (!isValid) {
+        // 更宽松的验证逻辑：
+        // 1. 如果后端返回了 normalized_url，说明格式基本正确
+        // 2. 如果 status_code 存在且不是明显的错误（4xx/5xx），也认为格式正确
+        // 3. 只拒绝明显的格式错误（没有 normalized_url 且 is_valid 明确为 false）
+        const hasNormalizedUrl = !!validationResult.normalized_url;
+        const hasValidStatusCode = validationResult.status_code !== undefined && 
+          validationResult.status_code !== 0 && 
+          validationResult.status_code < 500; // 允许 4xx（可能是防爬虫）
+        
+        // 如果后端明确说格式无效，且没有 normalized_url，才拒绝
+        const isFormatInvalid = validationResult.is_valid === false && !hasNormalizedUrl;
+        
+        if (isFormatInvalid && !hasValidStatusCode) {
           console.error("[Onboarding] Backend validation failed - is_valid:", validationResult.is_valid);
           setError(
             validationResult.error || 
@@ -218,10 +241,13 @@ export default function OnboardingPage() {
           setIsLoading(false);
           return;
         }
-        
 
-        // 如果不可达，只显示警告但继续执行
-        if (!validationResult.reachable) {
+        // 如果不可达或状态码不是 2xx，只显示警告但继续执行
+        // 因为有些网站可能有防爬虫机制，或者需要特殊处理
+        if (!validationResult.reachable || 
+            (validationResult.status_code !== undefined && 
+             validationResult.status_code >= 400 && 
+             validationResult.status_code < 500)) {
           console.warn("URL may not be reachable:", validationResult.error);
           toast.warning("URL may not be reachable", {
             description: "We'll try to proceed anyway.",
@@ -558,7 +584,63 @@ export default function OnboardingPage() {
                   id="url"
                   type="text"
                   value={url}
-                  onChange={(e) => setUrl(e.target.value)}
+                  onChange={(e) => {
+                    let value = e.target.value;
+                    
+                    // Auto-complete https:// when user types a complete domain
+                    // Only if the value doesn't already have a protocol
+                    if (value && !value.startsWith("http://") && !value.startsWith("https://")) {
+                      const trimmed = value.trim();
+                      // Check if it's a complete domain (has dot and valid TLD)
+                      if (trimmed.includes('.') && !trimmed.includes(' ')) {
+                        const parts = trimmed.split('.');
+                        const lastPart = parts[parts.length - 1].split('/')[0];
+                        // If the last part (TLD) is at least 2 characters and is letters
+                        if (lastPart.length >= 2 && /^[a-zA-Z]{2,}$/.test(lastPart)) {
+                          // Use the domain pattern to validate
+                          const domainPattern = /^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}(\/.*)?$/;
+                          if (domainPattern.test(trimmed)) {
+                            // Only auto-complete if we haven't already auto-completed this value
+                            const newValue = `https://${trimmed}`;
+                            if (autoCompleteRef.current !== newValue) {
+                              autoCompleteRef.current = newValue;
+                              value = newValue;
+                            }
+                          }
+                        }
+                      }
+                    } else if (value.startsWith("https://") || value.startsWith("http://")) {
+                      // Reset auto-complete ref when user manually adds protocol
+                      autoCompleteRef.current = "";
+                    }
+                    
+                    setUrl(value);
+                    // Clear error when user starts typing
+                    if (error) {
+                      setError(null);
+                    }
+                  }}
+                  onBlur={(e) => {
+                    // On blur, auto-complete https:// if it looks like a domain without protocol
+                    let value = e.target.value.trim();
+                    if (value && !value.startsWith("http://") && !value.startsWith("https://")) {
+                      // Check if it looks like a domain (contains dot and has valid TLD)
+                      // Simple pattern: domain.tld or domain.tld/path
+                      if (value.includes('.') && !value.includes(' ')) {
+                        const parts = value.split('.');
+                        const lastPart = parts[parts.length - 1].split('/')[0];
+                        // If the last part (TLD) is at least 2 characters and is letters, it's likely a domain
+                        if (lastPart.length >= 2 && /^[a-zA-Z]{2,}$/.test(lastPart)) {
+                          // Use the improved domain pattern to validate
+                          const domainPattern = /^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}(\/.*)?$/;
+                          if (domainPattern.test(value)) {
+                            value = `https://${value}`;
+                            setUrl(value);
+                          }
+                        }
+                      }
+                    }
+                  }}
                   required
                   placeholder="example.com"
                   className="w-full pl-12 pr-4 py-3 rounded-lg bg-muted/50 focus:bg-background focus:ring-2 focus:ring-primary transition-colors text-foreground placeholder-muted-foreground"

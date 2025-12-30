@@ -6,7 +6,7 @@ import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { cn } from "@/lib/utils";
-import { Copy, Check, ExternalLink, ZoomIn, Download, Loader2 } from "lucide-react";
+import { Copy, Check, ExternalLink, Download, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api/client";
 
@@ -41,7 +41,8 @@ function preprocessMarkdown(content: string): string {
   
   // 4. 检测并转换缺少表头的表格格式
   // 例如：`keyword` | `position` | `volume` 应该转换为标准表格格式
-  processed = detectAndConvertTableFormat(processed);
+  // 暂时禁用自动转换，让 ReactMarkdown 和 remark-gfm 自己处理表格
+  // processed = detectAndConvertTableFormat(processed);
   
   // 5. 修复表格格式问题
   // 有时表格行之间缺少换行符，导致整个表格被当作一行文本
@@ -67,8 +68,10 @@ function preprocessMarkdown(content: string): string {
  * - 如果检测到连续的多行表格数据（至少 1 行），但没有表头
  * - 自动添加表头（从上下文或默认列名推断）
  * - 添加分隔行
+ * 
+ * @deprecated 暂时禁用，让 ReactMarkdown 自己处理表格
  */
-function detectAndConvertTableFormat(content: string): string {
+function _detectAndConvertTableFormat(content: string): string {
   if (!content.includes('|')) return content;
   
   const lines = content.split('\n');
@@ -86,41 +89,60 @@ function detectAndConvertTableFormat(content: string): string {
     // 检查是否是标准表格的分隔行（只包含 |、-、:、空格）
     const isSeparatorRow = /^\|[\s:|-]+\|$/.test(trimmed) && trimmed.includes('-');
     
-    // 如果当前行是表格行，但不是分隔行，尝试检测表格块
-    if (isTableRow && !isSeparatorRow) {
-      // 检查前一行是否是分隔行（说明已经是标准表格）
+    // 如果是分隔行，说明这是标准表格，直接输出
+    if (isSeparatorRow) {
+      result.push(line);
+      i++;
+      continue;
+    }
+    
+    // 如果当前行是表格行，检查是否是标准表格的一部分
+    if (isTableRow) {
+      // 检查下一行是否是分隔行
+      const nextLine = i + 1 < lines.length ? lines[i + 1].trim() : '';
+      const nextIsSeparator = /^\|[\s:|-]+\|$/.test(nextLine) && nextLine.includes('-');
+      
+      // 如果下一行是分隔行，说明当前行是表头，这是标准表格，直接输出
+      if (nextIsSeparator) {
+        result.push(line);
+        i++;
+        continue;
+      }
+      
+      // 检查前一行是否是分隔行（说明当前行是数据行）
       const prevLine = i > 0 ? lines[i - 1].trim() : '';
       const prevIsSeparator = /^\|[\s:|-]+\|$/.test(prevLine) && prevLine.includes('-');
       
-      // 如果前一行是分隔行，说明已经是标准表格，直接输出
+      // 如果前一行是分隔行，说明这是标准表格的数据行，直接输出
       if (prevIsSeparator) {
         result.push(line);
         i++;
         continue;
       }
       
-      // 收集连续的表格行
+      // 到这里说明既不是标准表格，需要收集表格行进行处理
       const tableRows: string[] = [trimmed];
       let j = i + 1;
       
-      // 向前查找，看是否有更多表格行
+      // 向前查找，收集连续的表格行
       while (j < lines.length) {
-        const nextLine = lines[j].trim();
-        const nextPipeCount = (nextLine.match(/\|/g) || []).length;
-        const isNextTableRow = nextPipeCount >= 2;
-        const isNextSeparator = /^\|[\s:|-]+\|$/.test(nextLine) && nextLine.includes('-');
+        const nextRowLine = lines[j].trim();
+        const nextRowPipeCount = (nextRowLine.match(/\|/g) || []).length;
+        const isNextTableRow = nextRowPipeCount >= 2;
+        const isNextSeparator = /^\|[\s:|-]+\|$/.test(nextRowLine) && nextRowLine.includes('-');
         
-        // 如果下一行是分隔行，说明这是标准表格，不需要转换
+        // 如果遇到分隔行，说明前面收集的是表头，这是标准表格
         if (isNextSeparator) {
-          result.push(...tableRows);
-          result.push(nextLine);
+          // 直接输出所有收集的行和分隔行
+          result.push(...tableRows.map((row, idx) => idx === 0 ? line : lines[i + idx]));
+          result.push(lines[j]);
           i = j + 1;
           break;
         }
         
-        // 如果下一行也是表格行，继续收集
+        // 如果是表格行，继续收集
         if (isNextTableRow) {
-          tableRows.push(nextLine);
+          tableRows.push(nextRowLine);
           j++;
         } else {
           // 遇到非表格行，停止收集
@@ -128,83 +150,54 @@ function detectAndConvertTableFormat(content: string): string {
         }
       }
       
-      // 如果收集到表格数据行，且没有表头，进行转换
+      // 如果循环结束后没有找到分隔行，说明这不是标准表格
+      // 需要检查是否应该转换
       if (j === i + tableRows.length && tableRows.length > 0) {
-        // 分析第一行，确定列数和内容类型
-        const firstRow = tableRows[0];
-        const firstRowCells = firstRow.split('|').map(c => c.trim()).filter(c => c);
-        const columnCount = firstRowCells.length;
+        // 检查第一行的内容，看是否包含常见的表头关键词
+        const firstRowCells = tableRows[0].split('|').map(c => c.trim()).filter(c => c);
         
-        // 检查单元格内容，推断表头
-        const cellContents = firstRowCells.map(cell => {
-          // 移除反引号
-          const cleaned = cell.replace(/^`|`$/g, '').trim();
-          return cleaned;
+        // 如果第一行包含表头关键词，认为它就是表头，只需要添加分隔行
+        const hasHeaderKeywords = firstRowCells.some(cell => {
+          const lower = cell.toLowerCase().replace(/^`|`$/g, '').trim();
+          return ['priority', 'action', 'effort', 'impact', 'timeline',
+                  'tag', 'content', 'length', 'status', 'recommendation', 
+                  'item', 'position', 'column', 'name', 'value', 'type',
+                  'keyword', 'url', 'search', 'volume',
+                  '优先级', '操作', '影响', '时间',
+                  '标签', '内容', '长度', '状态', '建议',
+                  '关键词', '排名', '搜索量'].some(keyword => lower.includes(keyword));
         });
         
-        // 从上下文推断表头（检查前几行）
-        let headers: string[] = [];
-        const contextLines = [];
-        for (let k = Math.max(0, i - 3); k < i; k++) {
-          contextLines.push(lines[k].trim().toLowerCase());
-        }
-        const contextText = contextLines.join(' ');
-        
-        // 根据上下文和内容推断表头
-        if (contextText.includes('keyword') || contextText.includes('排名') || contextText.includes('position')) {
-          if (columnCount === 4) {
-            headers = ['Keyword', 'Position', 'Search Volume', 'URL'];
-          } else if (columnCount === 3) {
-            headers = ['Keyword', 'Position', 'URL'];
+        if (hasHeaderKeywords) {
+          // 第一行是表头，添加标准分隔行
+          const columnCount = firstRowCells.length;
+          const separator = '| ' + Array(columnCount).fill('---').join(' | ') + ' |';
+          result.push(line); // 保留原始格式的第一行（表头）
+          result.push(separator); // 添加分隔行
+          // 添加剩余的数据行（保留原始格式）
+          for (let k = 1; k < tableRows.length; k++) {
+            result.push(lines[i + k]);
           }
-        } else if (contextText.includes('关键词')) {
-          if (columnCount === 4) {
-            headers = ['关键词', '排名', '搜索量', 'URL'];
-          } else if (columnCount === 3) {
-            headers = ['关键词', '排名', 'URL'];
-          }
+          i = j;
+          continue;
         }
         
-        // 如果无法推断，使用默认表头
-        if (headers.length !== columnCount) {
-          headers = Array.from({ length: columnCount }, (_, idx) => {
-            // 尝试从第一个单元格推断
-            if (idx === 0 && cellContents[0]) {
-              // 如果第一个单元格看起来像关键词或标题
-              return 'Item';
-            } else if (idx === 1 && /^\d+$/.test(cellContents[1] || '')) {
-              return 'Position';
-            } else if (idx === 2 && /^\d+$/.test(cellContents[2] || '')) {
-              return 'Value';
-            } else if (idx === columnCount - 1 && (cellContents[columnCount - 1] || '').startsWith('/')) {
-              return 'URL';
-            }
-            return `Column ${idx + 1}`;
-          });
-        }
-        
-        // 生成表头行
-        const headerRow = '| ' + headers.join(' | ') + ' |';
-        // 生成分隔行
-        const separatorRow = '| ' + headers.map(() => '---').join(' | ') + ' |';
-        
-        // 清理数据行中的反引号
-        const cleanedRows = tableRows.map(row => {
-          // 移除单元格中的反引号，但保留其他格式
-          return row.replace(/`([^`]+)`/g, '$1');
-        });
-        
-        // 输出表头、分隔行和数据行
-        result.push(headerRow);
-        result.push(separatorRow);
-        result.push(...cleanedRows);
-        
-        i = j;
+        // 如果不包含表头关键词，直接输出（不做转换，避免误判）
+        result.push(line);
+        i++;
         continue;
       }
+      
+      // 其他情况，继续下一轮循环
+      if (j > i) {
+        i = j;
+      } else {
+        i++;
+      }
+      continue;
     }
     
-    // 不是表格行或不需要转换，直接输出
+    // 不是表格行，直接输出
     result.push(line);
     i++;
   }
@@ -534,41 +527,62 @@ export const MarkdownContent = React.memo<MarkdownContentProps>(
                 const match = /language-(\w+)/.exec(codeClassName || "");
                 const codeString = String(children).replace(/\n$/, "");
                 
-                return !inline && match ? (
-                  <div className="group relative my-4 last:mb-0">
-                    <div className="absolute left-3 top-0 -translate-y-1/2 rounded-md border border-border bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground shadow-sm">
-                      {match[1]}
+                // 代码块（非行内）
+                if (!inline) {
+                  // 有语言标识符，使用语法高亮
+                  if (match) {
+                    return (
+                      <div className="group relative my-4 last:mb-0">
+                        <div className="absolute left-3 top-0 -translate-y-1/2 rounded-md border border-border bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground shadow-sm">
+                          {match[1]}
+                        </div>
+                        <CopyButton code={codeString} />
+                        <SyntaxHighlighter
+                          style={isDark ? oneDark : oneLight}
+                          language={match[1]}
+                          PreTag="div"
+                          className="!mt-0 max-w-full rounded-lg border border-border text-sm"
+                          wrapLines={true}
+                          wrapLongLines={true}
+                          lineProps={{
+                            style: {
+                              wordBreak: "break-all",
+                              whiteSpace: "pre-wrap",
+                              overflowWrap: "break-word",
+                            },
+                          }}
+                          customStyle={{
+                            margin: 0,
+                            padding: "1rem",
+                            paddingTop: "1.5rem",
+                            maxWidth: "100%",
+                            overflowX: "auto",
+                            fontSize: "0.875rem",
+                            borderRadius: "0.5rem",
+                            background: isDark ? "#1e1e1e" : "#f8f8f8",
+                          }}
+                        >
+                          {codeString}
+                        </SyntaxHighlighter>
+                      </div>
+                    );
+                  }
+                  
+                  // 没有语言标识符的代码块，使用简单样式
+                  return (
+                    <div className="group relative my-4 last:mb-0">
+                      <CopyButton code={codeString} />
+                      <pre className="overflow-x-auto rounded-lg border border-border bg-muted/50 p-4 text-sm">
+                        <code className="font-mono text-foreground">
+                          {children}
+                        </code>
+                      </pre>
                     </div>
-                    <CopyButton code={codeString} />
-                    <SyntaxHighlighter
-                      style={isDark ? oneDark : oneLight}
-                      language={match[1]}
-                      PreTag="div"
-                      className="!mt-0 max-w-full rounded-lg border border-border text-sm"
-                      wrapLines={true}
-                      wrapLongLines={true}
-                      lineProps={{
-                        style: {
-                          wordBreak: "break-all",
-                          whiteSpace: "pre-wrap",
-                          overflowWrap: "break-word",
-                        },
-                      }}
-                      customStyle={{
-                        margin: 0,
-                        padding: "1rem",
-                        paddingTop: "1.5rem",
-                        maxWidth: "100%",
-                        overflowX: "auto",
-                        fontSize: "0.875rem",
-                        borderRadius: "0.5rem",
-                        background: isDark ? "#1e1e1e" : "#f8f8f8",
-                      }}
-                    >
-                      {codeString}
-                    </SyntaxHighlighter>
-                  </div>
-                ) : (
+                  );
+                }
+                
+                // 行内代码
+                return (
                   <code
                     className="rounded border border-border/50 bg-background px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
                     {...props}
@@ -785,9 +799,12 @@ export const MarkdownContent = React.memo<MarkdownContentProps>(
               },
               // 图片 - 支持点击放大
               img(props) {
-                const src = typeof props.src === 'string' ? props.src : undefined;
+                const src = typeof props.src === 'string' ? props.src : '';
                 const alt = props.alt || "";
+
                 if (!src) return null;
+
+                // 直接使用原始 URL，不做任何处理
                 return (
                   <span className="group relative my-4 block">
                     <img
@@ -797,10 +814,6 @@ export const MarkdownContent = React.memo<MarkdownContentProps>(
                       loading="lazy"
                       onClick={() => setPreviewImage({ src, alt })}
                     />
-                    <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded bg-black/50 px-2 py-1 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
-                      <ZoomIn size={12} />
-                      Click to zoom
-                    </span>
                   </span>
                 );
               },

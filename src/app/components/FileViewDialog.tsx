@@ -476,6 +476,12 @@ export const FileViewDialog = React.memo<{
     return documentExtensions.includes(fileExtension);
   }, [fileExtension]);
 
+  const isImage = useMemo(() => {
+    // 支持预览的图片类型
+    const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico'];
+    return imageExtensions.includes(fileExtension);
+  }, [fileExtension]);
+
   const language = useMemo(() => {
     return LANGUAGE_MAP[fileExtension] || "text";
   }, [fileExtension]);
@@ -693,7 +699,67 @@ export const FileViewDialog = React.memo<{
                 {file?.isBinary && file?.downloadUrl ? (
                   // 二进制文件：显示预览和下载
                   <div className="flex h-full flex-col">
-                    {isDocument && !previewError ? (
+                    {isImage && !previewError ? (
+                      // 图片文件：直接显示图片
+                      <div className="flex h-full flex-col">
+                        <div className="mb-2 flex items-center justify-between rounded-lg bg-gray-50 p-3">
+                          <div className="flex items-center gap-2">
+                            <FileText size={20} className="text-gray-500" />
+                            <span className="text-sm font-medium text-gray-700">
+                              {file.path.split('/').pop()}
+                            </span>
+                            {file.fileSize && (
+                              <span className="text-xs text-gray-500">
+                                ({(file.fileSize / 1024).toFixed(2)} KB)
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              onClick={() => window.open(file.downloadUrl, '_blank')}
+                              variant="outline"
+                              size="sm"
+                              className="border-gray-300"
+                            >
+                              Open in New Tab
+                            </Button>
+                            <Button
+                              onClick={handleDownload}
+                              size="sm"
+                              className="bg-teal-600 text-white hover:bg-teal-700"
+                            >
+                              <Download size={16} className="mr-2" />
+                              Download
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="flex-1 overflow-auto rounded-lg border border-gray-200 bg-white relative flex items-center justify-center p-4">
+                          {isPreviewLoading && !previewError ? (
+                            // 加载中状态
+                            <div className="text-center">
+                              <Loader2 className="mx-auto mb-4 h-8 w-8 animate-spin text-gray-400" />
+                              <p className="text-sm text-gray-500">Loading image...</p>
+                            </div>
+                          ) : (
+                            // 显示图片
+                            <img
+                              src={file.downloadUrl}
+                              alt={file.path.split('/').pop()}
+                              className="max-w-full max-h-full object-contain rounded-lg shadow-md"
+                              onError={() => {
+                                console.error('[FileViewDialog] Failed to load image:', file.downloadUrl);
+                                setPreviewError(true);
+                                setIsPreviewLoading(false);
+                              }}
+                              onLoad={() => {
+                                setIsPreviewLoading(false);
+                                setPreviewError(false);
+                              }}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    ) : isDocument && !previewError ? (
                       // 文档文件：显示预览iframe
                       <div className="flex h-full flex-col">
                         <div className="mb-2 flex items-center justify-between rounded-lg bg-gray-50 p-3">
@@ -794,18 +860,18 @@ export const FileViewDialog = React.memo<{
                         <div className="mb-4 rounded-lg bg-gray-100 p-6 text-center">
                           <FileText size={48} className="mx-auto mb-4 text-gray-400" />
                           <p className="mb-2 text-sm font-medium text-gray-700">
-                            {previewError && isDocument ? 'Preview Unavailable' : 'Binary File'}
+                            {previewError && (isDocument || isImage) ? 'Preview Unavailable' : 'Binary File'}
                           </p>
                           <p className="mb-4 text-xs text-gray-500">
                             {file.fileSize ? `Size: ${(file.fileSize / 1024).toFixed(2)} KB` : 'This is a binary file'}
-                            {previewError && isDocument && (
+                            {previewError && (isDocument || isImage) && (
                               <span className="block mt-2 text-orange-600">
                                 Preview is not available. Please download to view.
                               </span>
                             )}
                           </p>
                           <div className="flex gap-2 justify-center">
-                            {previewError && isDocument && (
+                            {previewError && (isDocument || isImage) && (
                               <Button
                                 onClick={() => {
                                   setPreviewError(false);

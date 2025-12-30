@@ -189,7 +189,7 @@ export function ContextTab() {
     try {
       await downloadFile(file.id, file.filename);
       toast.success("File downloaded successfully");
-    } catch (error) {
+    } catch {
       toast.error("Failed to download file");
     }
   }, [downloadFile]);
