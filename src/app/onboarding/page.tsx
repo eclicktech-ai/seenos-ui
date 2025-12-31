@@ -392,13 +392,12 @@ export default function OnboardingPage() {
       <header className="flex h-14 flex-shrink-0 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-2">
           <Image
-            src={theme === "dark" ? "/logo-dark.svg" : "/logo-icon.svg"}
+            src={theme === "dark" ? "/SeenOS_白色.svg" : "/logo.svg"}
             alt="SeenOS"
-            width={28}
-            height={28}
+            width={120}
+            height={120}
             priority
           />
-          <h1 className="text-base font-semibold text-foreground">SeenOS</h1>
         </div>
         <div className="flex items-center gap-2">
           {/* User Info */}
@@ -445,17 +444,17 @@ export default function OnboardingPage() {
         }`}>
           {/* Title */}
           <div className="text-center mb-10">
-            <div className={`inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 mb-6 transition-all duration-500 ${
+            <div className={`inline-flex items-center justify-center w-52 h-52 rounded-2xl bg-primary/10 mb-6 transition-all duration-500 ${
               isMounted 
                 ? "scale-100 opacity-100" 
                 : "scale-90 opacity-0"
             }`}>
               <div className="relative">
                 <Image
-                  src={theme === "dark" ? "/logo-dark.svg" : "/logo.svg"}
+                  src={theme === "dark" ? "/SeenOS_白色.svg" : "/logo.svg"}
                   alt="SeenOS"
-                  width={60}
-                  height={60}
+                  width={200}
+                  height={200}
                   priority
                   className="animate-[float_3s_ease-in-out_infinite]"
                 />

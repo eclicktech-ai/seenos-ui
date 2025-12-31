@@ -303,21 +303,12 @@ function AuthenticatedHome() {
         <header className="flex h-14 flex-shrink-0 items-center justify-between border-b border-border px-4">
           <div className="flex items-center gap-2">
             <Image
-              src={theme === "dark" ? "/logo-dark.svg" : "/logo-icon.svg"}
+              src={theme === "dark" ? "/SeenOS_白色.svg" : "/logo.svg"}
               alt="SeenOS"
-              width={28}
-              height={28}
+              width={120}
+              height={120}
               priority
             />
-            <h1 className="text-base font-semibold text-foreground">
-              Seen
-              <span className="relative inline-block">
-                <span className="relative inline-flex items-center justify-center">
-                  o
-                </span>
-              </span>
-              S
-            </h1>
           </div>
           <div className="flex items-center gap-2">
             {/* User Info */}

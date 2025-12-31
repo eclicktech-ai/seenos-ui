@@ -91,20 +91,18 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-md">
-        {/* Logo & Title */}
+        {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center mb-4">
+          <div className="inline-flex items-center justify-center">
             <Image
               src="/logo.svg"
               alt="SeenOS Logo"
-              width={80}
-              height={80}
+              width={200}
+              height={200}
               priority
               className="drop-shadow-lg"
             />
           </div>
-          <h1 className="text-2xl font-bold text-foreground">SeenOS</h1>
-          <p className="text-muted-foreground mt-2">Sign in to your account</p>
         </div>
 
         {/* Login Form */}
