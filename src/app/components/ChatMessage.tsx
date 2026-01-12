@@ -1,23 +1,23 @@
 "use client";
 
-import React, { useMemo, useState, useCallback, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { Bot, User, FileText, ChevronDown, ChevronUp, Coins } from "lucide-react";
-import { SubAgentIndicator } from "@/app/components/SubAgentIndicator";
-import { ToolCallBox } from "@/app/components/ToolCallBox";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
+import { ContentBlocksRenderer, AttachmentRefBlockView } from "@/app/components/ContentBlocks";
+import { FeedbackButtons } from "@/app/components/FeedbackButtons";
 import type {
-  SubAgent,
   ToolCall,
   ActionRequest,
   ReviewConfig,
   Message,
   ContextSearchResult,
   TokenUsageSummary,
+  ContentBlock,
+  AttachmentRefBlock,
+  ToolProgress,
+  Feedback,
 } from "@/app/types/types";
-import {
-  extractSubAgentContent,
-  extractStringFromMessageContent,
-} from "@/app/utils/utils";
+import { extractStringFromMessageContent } from "@/app/utils/utils";
 import { cn } from "@/lib/utils";
 
 // 思考中动画组件 - 动态跳动的三个点
@@ -157,6 +157,10 @@ interface ChatMessageProps {
   graphId?: string;
   /** 是否启用淡入动画（用于渐进加载历史消息） */
   animate?: boolean;
+  /** 工具进度信息 (toolCallId -> ToolProgress) - 用于实时进度显示 */
+  toolProgress?: Map<string, ToolProgress>;
+  /** 工具进度信息 (toolName -> ToolProgress) - 用于处理后端 toolCallId 不一致的问题 */
+  toolProgressByName?: Map<string, ToolProgress>;
 }
 
 export const ChatMessage = React.memo<ChatMessageProps>(
@@ -172,6 +176,8 @@ export const ChatMessage = React.memo<ChatMessageProps>(
     onResumeInterrupt,
     graphId,
     animate = false,
+    toolProgress,
+    toolProgressByName,
   }) => {
     // 从 localStorage 读取 showTokenUsage 设置
     // AuthProvider 在登录和更新设置时会同步更新 localStorage
@@ -222,70 +228,31 @@ export const ChatMessage = React.memo<ChatMessageProps>(
     // 兼容 type 和 role 两种格式
     const messageType = (message as { type?: string }).type || (message as { role?: string }).role;
     const isUser = messageType === "human" || messageType === "user";
-    const messageContent = extractStringFromMessageContent(message);
+    
+    // 新架构：检查是否有 contentBlocks (WEBSOCKET_FRONTEND_GUIDE.md)
+    const contentBlocks = (message as Message).contentBlocks;
+    const hasContentBlocks = contentBlocks && contentBlocks.length > 0;
+    
+    // 提取消息内容：优先从 contentBlocks 中的 text block 获取，否则从 message.content 获取
+    const messageContent = useMemo(() => {
+      // 先尝试从 contentBlocks 中提取文本
+      if (hasContentBlocks) {
+        const textBlocks = contentBlocks!.filter(b => b.type === 'text');
+        if (textBlocks.length > 0) {
+          return textBlocks.map(b => (b as { content?: string }).content || '').join('\n');
+        }
+      }
+      // 回退到传统的 content 字段
+      return extractStringFromMessageContent(message);
+    }, [message, hasContentBlocks, contentBlocks]);
+    
     const hasContent = messageContent && messageContent.trim() !== "";
     const hasToolCalls = toolCalls.length > 0;
-    
-    // 提取子代理调用
-    // 根据 FRONTEND_API_GUIDE.md: type='subagent' 或 name='task' 且有 targetSubagent/subagent_type
-    const subAgents = useMemo(() => {
-      return toolCalls
-        .filter((toolCall: ToolCall) => {
-          // 新格式：type='subagent' 且有 targetSubagent
-          if (toolCall.type === "subagent" && toolCall.targetSubagent) {
-            return true;
-          }
-          // 旧格式：name='task' 且有 subagent_type
-          if (
-            toolCall.name === "task" &&
-            toolCall.args["subagent_type"] &&
-            toolCall.args["subagent_type"] !== "" &&
-            toolCall.args["subagent_type"] !== null
-          ) {
-            return true;
-          }
-          return false;
-        })
-        .map((toolCall: ToolCall) => {
-          // 获取子代理名称
-          const subAgentName = toolCall.targetSubagent || 
-            (toolCall.args as Record<string, unknown>)["subagent_type"] as string;
-          
-          // 映射状态
-          let status: SubAgent["status"] = "pending";
-          if (toolCall.status === "running") status = "running";
-          else if (toolCall.status === "completed" || toolCall.status === "success") status = "completed";
-          else if (toolCall.status === "error") status = "error";
-          
-          return {
-            id: toolCall.id,
-            name: toolCall.name,
-            subAgentName: subAgentName,
-            input: toolCall.args,
-            output: toolCall.result ? { result: toolCall.result } : undefined,
-            status,
-          } as SubAgent;
-        });
-    }, [toolCalls]);
-
-    const [expandedSubAgents, setExpandedSubAgents] = useState<
-      Record<string, boolean>
-    >({});
-    const isSubAgentExpanded = useCallback(
-      (id: string) => expandedSubAgents[id] ?? false,  // 默认不展开
-      [expandedSubAgents]
-    );
-    const toggleSubAgent = useCallback((id: string) => {
-      setExpandedSubAgents((prev) => ({
-        ...prev,
-        [id]: prev[id] === undefined ? true : !prev[id],  // 点击时展开
-      }));
-    }, []);
 
     return (
       <div
         className={cn(
-          "flex w-full max-w-full gap-3 overflow-x-hidden py-3",
+          "group flex w-full max-w-full gap-3 overflow-x-hidden py-3",
           isUser ? "flex-row-reverse" : "flex-row",
           animate && "animate-message-fade-in"
         )}
@@ -320,159 +287,127 @@ export const ChatMessage = React.memo<ChatMessageProps>(
           </div>
 
           {/* 用户消息直接显示 */}
-          {isUser && hasContent && (
-            <div className="relative flex justify-end">
-              <div className="overflow-hidden break-words rounded-2xl rounded-tr-sm bg-foreground px-4 py-3 text-sm font-normal leading-[160%] text-background shadow-sm dark:bg-foreground dark:text-background">
-                <p className="m-0 whitespace-pre-wrap break-words text-sm leading-relaxed">
-                  {messageContent}
-                </p>
-              </div>
+          {isUser && (
+            <div className="relative flex flex-col items-end gap-2">
+              {/* 用户消息中的附件 - 优先从 contentBlocks 渲染 (IMAGE_UPLOAD_FRONTEND_GUIDE.md) */}
+              {(() => {
+                // 方式 1: 从 contentBlocks 中提取 attachment_ref 类型的附件
+                if (hasContentBlocks) {
+                  const attachmentBlocks = contentBlocks!.filter(
+                    (b): b is AttachmentRefBlock => b.type === 'attachment_ref'
+                  );
+                  if (attachmentBlocks.length > 0) {
+                    return (
+                      <div className="flex flex-wrap justify-end gap-2">
+                        {attachmentBlocks.map((block) => (
+                          <AttachmentRefBlockView key={block.id} block={block} />
+                        ))}
+                      </div>
+                    );
+                  }
+                }
+                
+                // 方式 2: 兼容旧格式 - 从 content 数组中提取 image_url 类型
+                const content = (message as Message).content;
+                if (Array.isArray(content)) {
+                  const images = content.filter(
+                    (item): item is { type: 'image_url'; image_url: { url: string } } =>
+                      item != null && 
+                      typeof item === 'object' && 
+                      'type' in item &&
+                      item.type === 'image_url' && 
+                      'image_url' in item &&
+                      item.image_url != null &&
+                      typeof item.image_url === 'object' &&
+                      'url' in item.image_url &&
+                      typeof item.image_url.url === 'string'
+                  );
+                  if (images.length > 0) {
+                    return (
+                      <div className="flex flex-wrap justify-end gap-2">
+                        {images.map((img, idx) => (
+                          <div
+                            key={idx}
+                            className="overflow-hidden rounded-lg border border-border shadow-sm"
+                          >
+                            <img
+                              src={img.image_url.url}
+                              alt={`Uploaded image ${idx + 1}`}
+                              className="max-h-48 max-w-48 object-cover"
+                              loading="lazy"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
+                }
+                return null;
+              })()}
+              {/* 文本内容 */}
+              {hasContent && (
+                <div className="overflow-hidden break-words rounded-2xl rounded-tr-sm bg-foreground px-4 py-3 text-sm font-normal leading-[160%] text-background shadow-sm dark:bg-foreground dark:text-background">
+                  <p className="m-0 whitespace-pre-wrap break-words text-sm leading-relaxed">
+                    {messageContent}
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Assistant 消息：先显示工具和子代理，最后显示总结内容 */}
+          {/* Assistant 消息 - 使用 contentBlocks 按正确时间顺序渲染 */}
           {!isUser && (
-            <>
-              {/* SubAgents - 先显示子代理调用 */}
-              {subAgents.length > 0 && (
-                <div className="flex w-full max-w-full flex-col gap-3">
-                  {subAgents.map((subAgent) => (
-                    <div
-                      key={subAgent.id}
-                      className="flex w-full flex-col"
-                    >
-                      <SubAgentIndicator
-                        subAgent={subAgent}
-                        onClick={() => toggleSubAgent(subAgent.id)}
-                        isExpanded={isSubAgentExpanded(subAgent.id)}
-                      />
-                      {isSubAgentExpanded(subAgent.id) && (
-                        <div className="mt-2 space-y-3 rounded-lg border border-border bg-card/50 p-4">
-                          {/* Input Section */}
-                          <div>
-                            <h4 className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                              <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary"></span>
-                              Task Input
-                            </h4>
-                            <div className="rounded-md border border-border bg-muted/30 p-3">
-                              <MarkdownContent
-                                content={extractSubAgentContent(subAgent.input)}
-                                className="text-sm"
-                                cid={(message as Message).cid}
-                              />
-                            </div>
-                          </div>
-                          {/* Output Section */}
-                          {subAgent.output && (
-                            <div>
-                              <h4 className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-green-600 dark:text-green-400">
-                                <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500 dark:bg-green-400"></span>
-                                Result
-                              </h4>
-                              <div className="max-h-[500px] overflow-y-auto rounded-md border border-green-200 dark:border-green-800/50 bg-green-50/50 dark:bg-green-900/10 p-3">
-                                <MarkdownContent
-                                  content={extractSubAgentContent(subAgent.output)}
-                                  className="text-sm"
-                                  cid={(message as Message).cid}
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+            <div className="w-full">
+              {/* contentBlocks 渲染 - 保持正确的时间顺序 */}
+              {hasContentBlocks && (
+                <ContentBlocksRenderer 
+                  blocks={contentBlocks!} 
+                  cid={(message as Message).cid}
+                  isStreaming={isLoading}
+                  toolProgress={toolProgress}
+                  toolProgressByName={toolProgressByName}
+                />
+              )}
+              
+              {/* 备用渲染：如果没有 contentBlocks 但有 content，直接渲染 */}
+              {!hasContentBlocks && hasContent && (
+                <div className="rounded-2xl rounded-tl-sm bg-secondary/50 px-4 py-3 dark:bg-secondary/30">
+                  <MarkdownContent content={messageContent} />
                 </div>
               )}
-
-              {/* Tool Calls - 排除子代理调用和内部工具（它们单独显示或不显示） */}
-              {hasToolCalls && (
-                <div className={cn("flex w-full flex-col gap-2", subAgents.length > 0 && "mt-3")}>
-                  {toolCalls
-                    .filter((toolCall: ToolCall) => {
-                      // 排除子代理调用
-                      if (toolCall.type === "subagent") return false;
-                      if (toolCall.name === "task" && toolCall.args["subagent_type"]) return false;
-                      // 排除 todos 相关的工具调用（显示在左侧 Tasks 面板，不在聊天中重复显示）
-                      if (toolCall.name === "write_todos" || 
-                          toolCall.name === "todo_write" || 
-                          toolCall.name === "update_todos" ||
-                          toolCall.name?.includes("todo")) return false;
-                      return true;
-                    })
-                    .map((toolCall: ToolCall) => {
-                      const toolCallGenUiComponent = ui?.find(
-                        (u: unknown) => (u as { metadata?: { tool_call_id?: string } })?.metadata?.tool_call_id === toolCall.id
-                      );
-                      const actionRequest = actionRequestsMap?.get(toolCall.name);
-                      const reviewConfig = reviewConfigsMap?.get(toolCall.name);
-                      return (
-                        <ToolCallBox
-                          key={toolCall.id}
-                          toolCall={toolCall}
-                          uiComponent={toolCallGenUiComponent}
-                          stream={stream}
-                          graphId={graphId}
-                          actionRequest={actionRequest}
-                          reviewConfig={reviewConfig}
-                          onResume={onResumeInterrupt}
-                          isLoading={isLoading}
-                        />
-                      );
-                    })}
-                </div>
-              )}
-
-              {/* 思考中动画 - 显示在工具调用下方，当所有工具调用都已完成但内容还未出现时 */}
-              {(() => {
-                // 检查所有工具调用是否都已完成
-                const allToolCallsCompleted = hasToolCalls 
-                  ? toolCalls.every(tc => 
-                      tc.status === 'completed' || 
-                      tc.status === 'success' || 
-                      tc.status === 'error'
-                    )
-                  : true; // 没有工具调用时，视为"已完成"
-                
-                const shouldShowThinking = !isUser && 
-                  !hasContent && 
-                  (!hasToolCalls || allToolCallsCompleted) && 
-                  (isThinking || isLoading);
-                
-                return shouldShowThinking ? (
-                  <div className={cn(
-                    "relative flex justify-start",
-                    (hasToolCalls || subAgents.length > 0) && "mt-3"
-                  )}>
-                    <div className="rounded-2xl rounded-tl-sm bg-secondary/50 px-4 py-3 dark:bg-secondary/30">
-                      <ThinkingIndicator />
-                    </div>
+              
+              {/* 思考中动画 - 显示在内容下方，当消息正在加载且内容为空时 */}
+              {isLoading && !hasContent && !hasContentBlocks && (
+                <div className="relative flex justify-start">
+                  <div className="rounded-2xl rounded-tl-sm bg-secondary/50 px-4 py-3 dark:bg-secondary/30">
+                    <ThinkingIndicator />
                   </div>
-                ) : null;
-              })()}
-
-              {/* 消息内容（Summary）- 最后显示 */}
-              {hasContent && (
-                <div className={cn(
-                  "relative flex flex-col justify-start",
-                  (hasToolCalls || subAgents.length > 0) && "mt-3"
-                )}>
-                  <div className="overflow-hidden break-words rounded-2xl rounded-tl-sm bg-secondary/50 px-4 py-3 text-sm font-normal leading-[160%] text-foreground dark:bg-secondary/30">
-                    <MarkdownContent content={messageContent} cid={(message as Message).cid} />
-                  </div>
-                  
-                  {/* Citations - 显示引用来源 */}
-                  {(message as Message).metadata?.citations && (
-                    <CitationsSection citations={(message as Message).metadata!.citations!} />
-                  )}
-                  
-                  {/* Token Usage - 显示 token 使用量（需要用户开启设置） */}
-                  {showTokenUsage && (message as Message).metadata?.usage && (
-                    <TokenUsageDisplay usage={(message as Message).metadata!.usage!} />
-                  )}
                 </div>
               )}
-            </>
+              
+              {/* Citations - 显示引用来源 */}
+              {(message as Message).metadata?.citations && (
+                <CitationsSection citations={(message as Message).metadata!.citations!} />
+              )}
+              
+              {/* Token Usage - 显示 token 使用量（需要用户开启设置） */}
+              {showTokenUsage && (message as Message).metadata?.usage && (
+                <div className="mt-2">
+                  <TokenUsageDisplay usage={(message as Message).metadata!.usage!} />
+                </div>
+              )}
+              
+              {/* Feedback Buttons - 反馈按钮（点赞/踩） */}
+              {!isLoading && (message as Message).cid && (message as Message).id && (
+                <div className="mt-2 flex items-center justify-between">
+                  <FeedbackButtons
+                    messageId={(message as Message).id}
+                    conversationId={(message as Message).cid!}
+                    initialFeedback={(message as Message).metadata?.feedback as Feedback | null | undefined}
+                  />
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>

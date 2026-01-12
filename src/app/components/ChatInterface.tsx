@@ -10,6 +10,7 @@ import React, {
 } from "react";
 import { ArrowUp, Square, RefreshCw, Copy, MessageCircle, MessagesSquare, Plus, Check, Wrench, Sparkles } from "lucide-react";
 import { ChatMessage } from "@/app/components/ChatMessage";
+import { ImageUploadArea } from "@/app/components/ImageUploadArea";
 import type {
   ToolCall,
   ActionRequest,
@@ -18,9 +19,11 @@ import type {
 } from "@/app/types/types";
 import { extractStringFromMessageContent, formatConversationForLLM } from "@/app/utils/utils";
 import { useChatContext } from "@/providers/ChatProvider";
+import { useImageUpload } from "@/hooks";
 import { cn } from "@/lib/utils";
 import { useStickToBottom } from "use-stick-to-bottom";
 import { useSuggestions } from "@/hooks/useSuggestions";
+import { toast } from "sonner";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -59,6 +62,7 @@ export const ChatInterface = React.memo(() => {
   const [showAllChats, setShowAllChats] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const [chatContainerHeight, setChatContainerHeight] = useState(600);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const { scrollRef, contentRef } = useStickToBottom();
 
   const {
@@ -76,6 +80,16 @@ export const ChatInterface = React.memo(() => {
     startNewChat,
     switchConversation,
     setCid,
+    // 新增：分页和重试 (WEBSOCKET_FRONTEND_GUIDE.md)
+    pagination,
+    loadMoreMessages,
+    retryMessage,
+    retryingTurnId,
+    // 新增：工具进度状态 (PROGRESS_EVENTS_FRONTEND_GUIDE.md)
+    toolProgress,
+    toolProgressByName,
+    modelRetrying,
+    modelRetryInfo,
   } = useChatContext();
 
   // Use suggestions hook
@@ -85,6 +99,13 @@ export const ChatInterface = React.memo(() => {
     isLoading,
   });
 
+  // 图片上传 hook (IMAGE_UPLOAD_FRONTEND_GUIDE.md)
+  const imageUpload = useImageUpload({
+    maxImages: 5,
+    onError: (error: string) => {
+      toast.error(error);
+    },
+  });
 
   // 检查是否可以提交
   // 如果没有 cid，允许发送（发送时会自动创建会话）
@@ -97,11 +118,40 @@ export const ChatInterface = React.memo(() => {
         e.preventDefault();
       }
       const messageText = input.trim();
-      if (!messageText || isLoading || submitDisabled) return;
-      sendMessage(messageText);
+      const readyAttachments = imageUpload.getReadyAttachments();
+      const hasReadyAttachments = readyAttachments.length > 0;
+      
+      // 需要有消息或已准备好的附件才能发送
+      if (!messageText && !hasReadyAttachments) {
+        return;
+      }
+      
+      // 正在加载中，不允许发送
+      if (isLoading) {
+        return;
+      }
+      
+      // 检查连接状态（如果有 cid 且未连接，需要等待）
+      // 但如果没有 cid，允许发送（会自动创建会话）
+      if (cid && !isConnected) {
+        toast.warning("连接中，请稍候...");
+        return;
+      }
+      
+      // 检查是否有待上传的图片
+      if (imageUpload.hasPendingUploads) {
+        toast.warning("请等待图片上传完成");
+        return;
+      }
+      
+      // 发送消息
+      sendMessage(messageText, hasReadyAttachments ? readyAttachments : undefined);
+      
+      // 清空输入和附件
       setInput("");
+      imageUpload.clearAll();
     },
-    [input, isLoading, sendMessage, setInput, submitDisabled]
+    [input, isLoading, sendMessage, setInput, cid, isConnected, imageUpload]
   );
 
   const handleKeyDown = useCallback(
@@ -116,11 +166,12 @@ export const ChatInterface = React.memo(() => {
     [handleSubmit, submitDisabled]
   );
 
-  // Reset input and visible suggestions count when cid changes
+  // Reset input, suggestions, and attachments when cid changes
   useEffect(() => {
     setInput("");
     setVisibleSuggestions(4);
-  }, [cid]);
+    imageUpload.clearAll();
+  }, [cid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle suggestion click - use full prompt
   const _handleSuggestionClick = useCallback((fullPrompt: string) => {
@@ -142,6 +193,33 @@ export const ChatInterface = React.memo(() => {
     }
     prevIsRefreshingRef.current = isRefreshing;
   }, [isRefreshing]);
+
+  // 新增：加载更多历史消息 (WEBSOCKET_FRONTEND_GUIDE.md)
+  const handleLoadMore = useCallback(async () => {
+    if (!pagination?.hasMore || isLoadingMore || !loadMoreMessages) {
+      return;
+    }
+    
+    setIsLoadingMore(true);
+    try {
+      await loadMoreMessages();
+    } catch (error) {
+      console.error("[ChatInterface] Failed to load more messages:", error);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [pagination, isLoadingMore, loadMoreMessages]);
+
+  // 新增：滚动加载更多（当滚动到顶部时）
+  const handleScroll = useCallback(() => {
+    const scrollElement = scrollRef.current;
+    if (!scrollElement) return;
+    
+    // 当滚动到顶部附近（200px 阈值）时加载更多
+    if (scrollElement.scrollTop < 200 && pagination?.hasMore && !isLoadingMore) {
+      handleLoadMore();
+    }
+  }, [scrollRef, pagination, isLoadingMore, handleLoadMore]);
 
   // Copy chat to markdown
   const handleCopyChat = useCallback(async () => {
@@ -478,6 +556,7 @@ export const ChatInterface = React.memo(() => {
             <div
               className="scrollbar-auto-hide flex-1 overflow-y-auto overflow-x-hidden overscroll-contain"
               ref={scrollRef}
+              onScroll={handleScroll}
             >
               <div
                 className="mx-auto w-full max-w-[1024px] px-6 pb-6 pt-4"
@@ -494,6 +573,25 @@ export const ChatInterface = React.memo(() => {
           {isLoadingHistory && processedMessages.length === 0 && (
             <div className="flex items-center justify-center p-8">
               <p className="text-muted-foreground">Loading...</p>
+            </div>
+          )}
+
+          {/* 新增：加载更多历史消息提示 (WEBSOCKET_FRONTEND_GUIDE.md) */}
+          {pagination?.hasMore && (
+            <div className="flex justify-center py-4">
+              {isLoadingMore ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  <span>加载中...</span>
+                </div>
+              ) : (
+                <button
+                  onClick={handleLoadMore}
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  加载更早的消息
+                </button>
+              )}
             </div>
           )}
 
@@ -540,6 +638,8 @@ export const ChatInterface = React.memo(() => {
                     }
                     onResumeInterrupt={resumeInterrupt}
                     animate={isLoadingHistory}
+                    toolProgress={toolProgress}
+                    toolProgressByName={toolProgressByName}
                   />
                 );
               })}
@@ -559,11 +659,25 @@ export const ChatInterface = React.memo(() => {
                       toolCalls={[]}
                       isLoading={true}
                       isThinking={true}
+                      toolProgress={toolProgress}
+                      toolProgressByName={toolProgressByName}
                     />
                   );
                 }
                 return null;
               })()}
+              
+              {/* 模型重试指示器 (PROGRESS_EVENTS_FRONTEND_GUIDE.md) */}
+              {modelRetrying && modelRetryInfo && (
+                <div className="flex justify-center py-2">
+                  <div className="flex items-center gap-2 rounded-full bg-amber-50 dark:bg-amber-950/30 px-3 py-1.5 text-xs text-amber-600 dark:text-amber-400">
+                    <RefreshCw className="h-3 w-3 animate-spin" />
+                    <span>
+                      AI 重试中 ({modelRetryInfo.attempt}/{modelRetryInfo.maxRetries})
+                    </span>
+                  </div>
+                </div>
+              )}
             </>
           )}
               </div>
@@ -639,6 +753,19 @@ export const ChatInterface = React.memo(() => {
                   "transition-colors duration-200 ease-in-out focus-within:border-primary/50"
                 )}
               >
+                {/* 图片上传预览区 (IMAGE_UPLOAD_FRONTEND_GUIDE.md) */}
+                {imageUpload.attachments.length > 0 && (
+                  <div className="flex-shrink-0 border-b border-border px-4 pt-3">
+                    <ImageUploadArea
+                      attachments={imageUpload.attachments}
+                      isUploading={imageUpload.isUploading}
+                      onAddImages={imageUpload.addImages}
+                      onRemoveImage={imageUpload.removeImage}
+                      onRetryUpload={imageUpload.retryUpload}
+                      disabled={isLoading}
+                    />
+                  </div>
+                )}
                 <textarea
                   ref={textareaRef}
                   value={input}
@@ -648,25 +775,47 @@ export const ChatInterface = React.memo(() => {
                   className="font-inherit flex-1 resize-none border-0 bg-transparent px-4 py-4 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground"
                 />
                 <div className="flex flex-shrink-0 items-center justify-between gap-2 px-4 py-3">
-                  {/* Tools button - left side */}
-                  <button
-                    type="button"
-                    onClick={handleShowMore}
-                    disabled={isLoading}
-                    className={cn(
-                      "flex items-center gap-1.5 rounded-full border border-border bg-muted/50 px-3 py-1.5 text-xs font-normal text-muted-foreground transition-colors hover:border-primary/50 hover:bg-accent hover:text-accent-foreground",
-                      "disabled:opacity-50 disabled:cursor-not-allowed"
+                  {/* Left side buttons: Tools + Image Upload */}
+                  <div className="flex items-center gap-2">
+                    {/* Tools button */}
+                    <button
+                      type="button"
+                      onClick={handleShowMore}
+                      disabled={isLoading}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-full border border-border bg-muted/50 px-3 py-1.5 text-xs font-normal text-muted-foreground transition-colors hover:border-primary/50 hover:bg-accent hover:text-accent-foreground",
+                        "disabled:opacity-50 disabled:cursor-not-allowed"
+                      )}
+                    >
+                      <Wrench size={14} className="text-muted-foreground" />
+                      <span>Tools (13)</span>
+                    </button>
+
+                    {/* Image Upload button (IMAGE_UPLOAD_FRONTEND_GUIDE.md) */}
+                    {imageUpload.attachments.length === 0 && (
+                      <ImageUploadArea
+                        attachments={imageUpload.attachments}
+                        isUploading={imageUpload.isUploading}
+                        onAddImages={imageUpload.addImages}
+                        onRemoveImage={imageUpload.removeImage}
+                        onRetryUpload={imageUpload.retryUpload}
+                        disabled={isLoading}
+                      />
                     )}
-                  >
-                    <Wrench size={14} className="text-muted-foreground" />
-                    <span>Tools (13)</span>
-                  </button>
+                  </div>
 
                   {/* Send button - right side */}
                   <button
                     type={isLoading ? "button" : "submit"}
                     onClick={isLoading ? stopStream : handleSubmit}
-                    disabled={!isLoading && (submitDisabled || !input.trim())}
+                    disabled={
+                      !isLoading && (
+                        // 没有内容也没有准备好的附件
+                        (!input.trim() && imageUpload.getReadyAttachments().length === 0) ||
+                        // 有 cid 但未连接
+                        (!!cid && !isConnected)
+                      )
+                    }
                     className={cn(
                       "flex items-center gap-1.5 rounded border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-primary/50 hover:bg-accent",
                       "disabled:opacity-50 disabled:cursor-not-allowed"

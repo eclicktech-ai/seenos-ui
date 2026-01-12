@@ -5,7 +5,7 @@ const getApiBaseUrl = (): string => {
   if (process.env.NEXT_PUBLIC_API_URL) {
     return process.env.NEXT_PUBLIC_API_URL;
   }
-  return 'https://seenos.seokit.tech/api';
+  return 'http://localhost:8000/api';
 };
 
 const API_BASE_URL = getApiBaseUrl();
@@ -16,6 +16,15 @@ const API_BASE_URL = getApiBaseUrl();
 export interface ApiError extends Error {
   code?: string;
   status?: number;
+}
+
+/** 预签名上传响应 */
+export interface PresignedUploadResponse {
+  url: string;
+  s3Key: string;
+  fields: Record<string, string>;
+  publicUrl?: string;     // 公开访问 URL (用于即时预览)
+  attachmentId: string;   // 附件 ID (用于发送消息)
 }
 
 /** 用户 */
@@ -44,6 +53,7 @@ export interface UserSettings {
 /** 登录响应 */
 export interface LoginResponse {
   token: string;
+  sessionToken?: string;
   user: User;
   settings: UserSettings;
 }
@@ -115,6 +125,24 @@ export interface Todo {
   status: 'pending' | 'in_progress' | 'completed';
   createdAt: string;
   updatedAt: string;
+}
+
+/** 反馈类型 */
+export type FeedbackType = 'like' | 'dislike';
+
+/** 反馈创建/更新请求 */
+export interface FeedbackCreateRequest {
+  feedbackType: FeedbackType;
+  reason: string;  // 必填，1-1000 字符
+}
+
+/** 反馈响应 */
+export interface FeedbackResponse {
+  id: string;
+  messageId: string;
+  feedbackType: FeedbackType;
+  reason: string;
+  createdAt: string;
 }
 
 /** 对话详情响应 */
@@ -220,6 +248,7 @@ interface RequestOptions extends RequestInit {
 class ApiClient {
   private baseUrl: string;
   private token: string | null = null;
+  private sessionToken: string | null = null;
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl;
@@ -246,9 +275,24 @@ class ApiClient {
     }
   }
 
+  /** 设置会话 token */
+  setSessionToken(sessionToken: string | null): void {
+    this.sessionToken = sessionToken;
+    if (sessionToken) {
+      localStorage.setItem('deep_agents_session_token', sessionToken);
+    } else {
+      localStorage.removeItem('deep_agents_session_token');
+    }
+  }
+
   /** 获取当前 token */
   getToken(): string | null {
     return this.token;
+  }
+
+  /** 获取当前会话 token */
+  getSessionToken(): string | null {
+    return this.sessionToken;
   }
 
   /** 从 localStorage 加载 token */
@@ -262,9 +306,11 @@ class ApiClient {
   /** 清除 token */
   clearToken(): void {
     this.token = null;
+    this.sessionToken = null;
     if (typeof window !== 'undefined') {
       // Use the same key as AuthProvider
       localStorage.removeItem('deep_agents_token');
+      localStorage.removeItem('deep_agents_session_token');
       // Also clear user and settings to force AuthProvider to re-initialize
       localStorage.removeItem('deep_agents_user');
       localStorage.removeItem('deep_agents_settings');
@@ -278,6 +324,9 @@ class ApiClient {
     };
     if (this.token) {
       headers['Authorization'] = `Bearer ${this.token}`;
+    }
+    if (this.sessionToken) {
+      headers['X-Session-ID'] = this.sessionToken;
     }
     return headers;
   }
@@ -299,6 +348,18 @@ class ApiClient {
         ...fetchOptions.headers,
       },
     });
+
+    // 检查 Session 过期响应头 (SESSION_EXPIRATION_FRONTEND_GUIDE.md)
+    const sessionStatus = response.headers.get('x-session-status');
+    if (sessionStatus === 'expired') {
+      console.warn('[ApiClient] Session expired (X-Session-Status header)');
+      // 触发全局事件，让 UI 层处理
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('session:expired', {
+          detail: { message: 'Your session has expired. Please refresh to start a new session.' }
+        }));
+      }
+    }
 
     if (!response.ok) {
       // Token 过期处理
@@ -369,12 +430,41 @@ class ApiClient {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
 
+  // ============ 健康检查 API ============
+
+  /**
+   * 检查服务器健康状态
+   * 用于 WebSocket 重连前检测后端是否可用
+   * 健康检查端点: /health (不带 /api 前缀)
+   * @param timeoutMs 超时时间，默认 3000ms
+   * @returns true 表示服务器可用，false 表示不可用
+   */
+  async checkHealth(timeoutMs = 3000): Promise<boolean> {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+      // 健康检查端点不带 /api 前缀
+      const healthUrl = this.baseUrl.replace(/\/api$/, '/health');
+      const response = await fetch(healthUrl, {
+        method: 'GET',
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
   // ============ 认证 API ============
 
   /** 用户登录 */
   async login(email: string, password: string): Promise<LoginResponse> {
     const data = await this.post<LoginResponse>('/auth/login', { email, password });
     this.setToken(data.token);
+    this.setSessionToken(data.sessionToken ?? null);
     return data;
   }
 
@@ -416,6 +506,7 @@ class ApiClient {
       redirect_uri: redirectUri,
     });
     this.setToken(data.token);
+    this.setSessionToken(data.sessionToken ?? null);
     return data;
   }
 
@@ -465,6 +556,9 @@ class ApiClient {
     if (this.token) {
       headers['Authorization'] = `Bearer ${this.token}`;
     }
+    if (this.sessionToken) {
+      headers['X-Session-ID'] = this.sessionToken;
+    }
 
     const url = `${this.baseUrl}/conversations/${cid}/files/download?path=${encodeURIComponent(path)}`;
     const response = await fetch(url, { headers });
@@ -485,7 +579,7 @@ class ApiClient {
 
     const blob = await response.blob();
     const blobUrl = URL.createObjectURL(blob);
-    
+
     // 触发下载
     const a = document.createElement('a');
     a.href = blobUrl;
@@ -509,8 +603,8 @@ class ApiClient {
   // ============ 聊天 API (SSE 模式) ============
 
   /** 发送消息 (SSE 模式) */
-  async sendMessage(cid: string, content: string, attachments?: unknown[]): Promise<void> {
-    return this.post(`/chat/${cid}/messages`, { content, attachments });
+  async sendMessage(cid: string, content: string, attachments?: unknown[], attachmentIds?: string[]): Promise<void> {
+    return this.post(`/chat/${cid}/messages`, { content, attachments, attachmentIds });
   }
 
   /** 停止生成 (SSE 模式) */
@@ -521,6 +615,69 @@ class ApiClient {
   /** 恢复中断 (SSE 模式) */
   async resumeInterrupt(cid: string, interruptId: string, decision: unknown): Promise<void> {
     return this.post(`/chat/${cid}/interrupt/resume`, { interruptId, decision });
+  }
+
+  // ============ 消息反馈 API (FEEDBACK_API_FRONTEND_GUIDE.md) ============
+
+  /** 获取消息反馈状态 */
+  async getFeedback(cid: string, messageId: string): Promise<FeedbackResponse | null> {
+    const response = await fetch(
+      `${this.baseUrl}/conversations/${cid}/messages/${messageId}/feedback`,
+      {
+        method: 'GET',
+        headers: this.getHeaders() as HeadersInit,
+      }
+    );
+
+    if (response.status === 204) {
+      // No feedback exists
+      return null;
+    }
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const error: ApiError = new Error(errorData.error?.message || `HTTP ${response.status}`);
+      error.code = errorData.error?.code;
+      error.status = response.status;
+      throw error;
+    }
+
+    return response.json();
+  }
+
+  /** 创建消息反馈 */
+  async createFeedback(cid: string, messageId: string, data: FeedbackCreateRequest): Promise<FeedbackResponse> {
+    return this.post<FeedbackResponse>(
+      `/conversations/${cid}/messages/${messageId}/feedback`,
+      data
+    );
+  }
+
+  /** 更新消息反馈 */
+  async updateFeedback(cid: string, messageId: string, data: FeedbackCreateRequest): Promise<FeedbackResponse> {
+    return this.put<FeedbackResponse>(
+      `/conversations/${cid}/messages/${messageId}/feedback`,
+      data
+    );
+  }
+
+  /** 删除消息反馈 */
+  async deleteFeedback(cid: string, messageId: string): Promise<void> {
+    const response = await fetch(
+      `${this.baseUrl}/conversations/${cid}/messages/${messageId}/feedback`,
+      {
+        method: 'DELETE',
+        headers: this.getHeaders() as HeadersInit,
+      }
+    );
+
+    if (response.status !== 204 && !response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const error: ApiError = new Error(errorData.error?.message || `HTTP ${response.status}`);
+      error.code = errorData.error?.code;
+      error.status = response.status;
+      throw error;
+    }
   }
 
   // ============ 模型 API ============
@@ -673,6 +830,54 @@ class ApiClient {
     return { contexts, totalSize, maxSize };
   }
 
+  // ============ 图片上传 API (IMAGE_UPLOAD_FRONTEND_GUIDE.md) ============
+
+
+
+  /** 获取 Presigned Upload URL */
+  async getPresignedUploadUrl(filename: string, contentType: string): Promise<PresignedUploadResponse> {
+    return this.post('/storage/presigned-upload', { filename, contentType });
+  }
+
+  /** 
+   * Proxy Upload - 通过后端代理上传到 S3（解决 CORS 问题）
+   * 返回值包含 s3Key 和可选的 publicUrl
+   */
+  async proxyUploadImage(file: File): Promise<{
+    s3Key: string;
+    publicUrl?: string;
+  }> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const headers: HeadersInit = {};
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
+
+    const response = await fetch(`${this.baseUrl}/storage/proxy-upload`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      let errorData: { error?: { code?: string; message?: string }; message?: string; detail?: string } = {};
+      try {
+        errorData = await response.json();
+      } catch {
+        // 忽略 JSON 解析错误
+      }
+      const errorMessage = errorData.error?.message || errorData.message || errorData.detail || `HTTP ${response.status}`;
+      const error: ApiError = new Error(errorMessage);
+      error.code = errorData.error?.code;
+      error.status = response.status;
+      throw error;
+    }
+
+    return response.json();
+  }
+
   /** 上传上下文文件 */
   async uploadContextFile(file: File, filename?: string): Promise<ContextFile> {
     const formData = new FormData();
@@ -773,7 +978,7 @@ class ApiClient {
 
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
-    
+
     // 触发下载
     const a = document.createElement('a');
     a.href = url;
@@ -782,6 +987,60 @@ class ApiClient {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  }
+
+  /** 代理下载 S3 文件（绕过 CORS 限制） */
+  async proxyDownloadS3File(s3Url: string, filename?: string): Promise<void> {
+    const headers: HeadersInit = {};
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
+    if (this.sessionToken) {
+      headers['X-Session-ID'] = this.sessionToken;
+    }
+
+    const params = new URLSearchParams({ url: s3Url });
+    if (filename) {
+      params.append('filename', filename);
+    }
+
+    const response = await fetch(`${this.baseUrl}/storage/proxy-download?${params.toString()}`, { headers });
+
+    if (!response.ok) {
+      let errorData: { error?: { code?: string; message?: string }; message?: string; detail?: string } = {};
+      try {
+        errorData = await response.json();
+      } catch {
+        // 忽略 JSON 解析错误
+      }
+      const errorMessage = errorData.error?.message || errorData.message || errorData.detail || `HTTP ${response.status}`;
+      const error: ApiError = new Error(errorMessage);
+      error.code = errorData.error?.code;
+      error.status = response.status;
+      throw error;
+    }
+
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+
+    // 从 Content-Disposition 获取文件名，或使用传入的 filename
+    const contentDisposition = response.headers.get('Content-Disposition');
+    let downloadFilename = filename || 'download';
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="?([^";\n]+)"?/);
+      if (match) {
+        downloadFilename = match[1];
+      }
+    }
+
+    // 触发下载
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = downloadFilename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
   }
 
   /** 搜索上下文 */
@@ -1121,6 +1380,185 @@ class ApiClient {
       params.active_only = String(options.active_only);
     }
     return this.get<PlaybooksResponse>('/playbooks', Object.keys(params).length > 0 ? params : undefined);
+  }
+
+  // ============ Content API (Block Editor) ============
+
+  /** 获取结构化内容 */
+  async getStructuredContent(itemId: string): Promise<ContentItemResponse> {
+    return this.get<ContentItemResponse>(`/content/${itemId}/structured`);
+  }
+
+  /** 保存结构化内容 (全量更新) */
+  async saveStructuredContent(
+    itemId: string,
+    content: StructuredContentData,
+    expectedVersion?: number
+  ): Promise<SaveContentResponse> {
+    const body: { structured_content: StructuredContentData; expected_version?: number } = {
+      structured_content: content,
+    };
+    if (expectedVersion !== undefined) {
+      body.expected_version = expectedVersion;
+    }
+    return this.put<SaveContentResponse>(`/content/${itemId}/structured`, body);
+  }
+
+  /** 部分更新结构化内容 */
+  async patchStructuredContent(
+    itemId: string,
+    path: string,
+    value: unknown,
+    expectedVersion?: number
+  ): Promise<PatchContentResponse> {
+    const body: { path: string; value: unknown; expected_version?: number } = { path, value };
+    if (expectedVersion !== undefined) {
+      body.expected_version = expectedVersion;
+    }
+    return this.patch<PatchContentResponse>(`/content/${itemId}/structured`, body);
+  }
+
+  /** 获取 HTML 预览 */
+  async getContentPreview(itemId: string): Promise<string> {
+    const headers: HeadersInit = {
+      'Accept': 'text/html',
+    };
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
+
+    const response = await fetch(`${this.baseUrl}/content/${itemId}/preview`, { headers });
+    if (!response.ok) {
+      throw new Error(`Failed to get preview: ${response.status}`);
+    }
+    return response.text();
+  }
+
+  /** 获取单个区块预览 */
+  async getContentSectionPreview(
+    itemId: string,
+    sectionIndex: number
+  ): Promise<PreviewSectionResponse> {
+    return this.get<PreviewSectionResponse>(`/content/${itemId}/preview/section/${sectionIndex}`);
+  }
+
+  /** 发布内容 */
+  async publishContent(
+    itemId: string,
+    force: boolean = false
+  ): Promise<PublishContentResponse> {
+    return this.post<PublishContentResponse>(`/content/${itemId}/publish`, { force });
+  }
+
+  /** 创建内容项 */
+  async createContentItem(data: {
+    title: string;
+    page_type: ContentPageType;
+  }): Promise<ContentItemResponse> {
+    return this.post<ContentItemResponse>('/content', data);
+  }
+
+  /** 获取内容列表 */
+  async getContentList(options?: {
+    page_type?: ContentPageType;
+    status?: 'draft' | 'published' | 'archived';
+    limit?: number;
+    offset?: number;
+  }): Promise<ContentListResponse> {
+    const params: Record<string, string> = {};
+    if (options?.page_type) params.page_type = options.page_type;
+    if (options?.status) params.status = options.status;
+    if (options?.limit !== undefined) params.limit = String(options.limit);
+    if (options?.offset !== undefined) params.offset = String(options.offset);
+    return this.get<ContentListResponse>('/content', Object.keys(params).length > 0 ? params : undefined);
+  }
+
+  /** 删除内容项 */
+  async deleteContentItem(itemId: string): Promise<void> {
+    return this.delete(`/content/${itemId}`);
+  }
+
+  // ============ Content Library API (STRUCTURED_CONTENT_FRONTEND_GUIDE.md) ============
+
+  /** 获取所有集群（跨项目） */
+  async getAllClusters(projectId?: string): Promise<TopicClusterListResponse> {
+    const params: Record<string, string> = {};
+    if (projectId) params.project_id = projectId;
+    return this.get<TopicClusterListResponse>(
+      '/content-library/clusters',
+      Object.keys(params).length > 0 ? params : undefined
+    );
+  }
+
+  /** 获取项目下的集群 */
+  async getProjectClusters(projectId: string): Promise<TopicClusterListResponse> {
+    return this.get<TopicClusterListResponse>(`/content-library/projects/${projectId}/clusters`);
+  }
+
+  /** 获取集群详情 */
+  async getClusterDetail(projectId: string, clusterId: string): Promise<TopicClusterResponse> {
+    return this.get<TopicClusterResponse>(
+      `/content-library/projects/${projectId}/clusters/${clusterId}`
+    );
+  }
+
+  /** 获取所有内容项（跨项目） */
+  async getAllContentItems(params: ListItemsParams = {}): Promise<ContentItemListResponse> {
+    const searchParams: Record<string, string> = {};
+    if (params.projectId) searchParams.project_id = params.projectId;
+    if (params.topicClusterId) searchParams.topic_cluster_id = params.topicClusterId;
+    if (params.status) searchParams.status = params.status;
+    if (params.pageType) searchParams.page_type = params.pageType;
+    if (params.limit !== undefined) searchParams.limit = String(params.limit);
+    if (params.offset !== undefined) searchParams.offset = String(params.offset);
+
+    return this.get<ContentItemListResponse>(
+      '/content-library/items',
+      Object.keys(searchParams).length > 0 ? searchParams : undefined
+    );
+  }
+
+  /** 获取项目下的内容项 */
+  async getProjectItems(
+    projectId: string,
+    params: Omit<ListItemsParams, 'projectId'> = {}
+  ): Promise<ContentItemListResponse> {
+    const searchParams: Record<string, string> = {};
+    if (params.topicClusterId) searchParams.topic_cluster_id = params.topicClusterId;
+    if (params.status) searchParams.status = params.status;
+    if (params.pageType) searchParams.page_type = params.pageType;
+    if (params.limit !== undefined) searchParams.limit = String(params.limit);
+    if (params.offset !== undefined) searchParams.offset = String(params.offset);
+
+    return this.get<ContentItemListResponse>(
+      `/content-library/projects/${projectId}/items`,
+      Object.keys(searchParams).length > 0 ? searchParams : undefined
+    );
+  }
+
+  /** 获取集群下的内容项 */
+  async getClusterItems(
+    projectId: string,
+    clusterId: string,
+    params: { status?: string; pageType?: string; limit?: number; offset?: number } = {}
+  ): Promise<ContentItemListResponse> {
+    const searchParams: Record<string, string> = {};
+    if (params.status) searchParams.status = params.status;
+    if (params.pageType) searchParams.page_type = params.pageType;
+    if (params.limit !== undefined) searchParams.limit = String(params.limit);
+    if (params.offset !== undefined) searchParams.offset = String(params.offset);
+
+    return this.get<ContentItemListResponse>(
+      `/content-library/projects/${projectId}/clusters/${clusterId}/items`,
+      Object.keys(searchParams).length > 0 ? searchParams : undefined
+    );
+  }
+
+  /** 获取内容项详情 */
+  async getContentItemDetail(projectId: string, itemId: string): Promise<ContentItemDetailResponse> {
+    return this.get<ContentItemDetailResponse>(
+      `/content-library/projects/${projectId}/items/${itemId}`
+    );
   }
 }
 
@@ -1513,12 +1951,12 @@ export interface UpdateProjectRequest {
 
 /** URL 验证响应 */
 export interface ValidateUrlResponse {
-  input_url: string;      // 原始输入
-  normalized_url: string; // 标准化后的 URL
-  is_valid: boolean;      // 是否有效
+  inputUrl: string;       // 原始输入
+  normalizedUrl: string;  // 标准化后的 URL
+  isValid: boolean;       // 是否有效
   reachable: boolean;     // 是否可访问
-  status_code: number;    // HTTP 状态码
-  final_url: string;      // 最终 URL（可能重定向）
+  statusCode: number;     // HTTP 状态码
+  finalUrl: string;       // 最终 URL（可能重定向）
   error?: string;         // 错误信息
 }
 
@@ -1548,6 +1986,203 @@ export interface PlaybookCategoryGroup {
 /** Playbooks API 响应 */
 export interface PlaybooksResponse {
   categories: PlaybookCategoryGroup[];
+}
+
+// ============ Content API 类型定义 (Block Editor) ============
+
+/** 内容页面类型 */
+export type ContentPageType = 'listicle' | 'comparison' | 'guide' | 'landing' | 'blog';
+
+/** 内容 Block 类型 */
+export type ContentBlockType =
+  | 'intro'
+  | 'product_card'
+  | 'comparison_row'
+  | 'step'
+  | 'feature'
+  | 'text_section'
+  | 'blog_section'
+  | 'conclusion'
+  | 'image'
+  | 'video'
+  | 'quote'
+  | 'call_to_action'
+  | 'hero'
+  | 'testimonial'
+  | 'pricing'
+  | 'faq';
+
+/** Block 元数据 */
+export interface ContentBlockMeta {
+  id: string;
+  type: ContentBlockType;
+  order: number;
+  is_ai_generated?: boolean;
+  last_edited_at?: string;
+}
+
+/** 页面元数据 */
+export interface ContentPageMeta {
+  title: string;
+  seo_title?: string;
+  seo_description?: string;
+  slug?: string;
+  target_keyword?: string;
+  secondary_keywords?: string[];
+  author?: string;
+  published_date?: string;
+}
+
+/** 全局设置 */
+export interface ContentGlobalSettings {
+  show_toc?: boolean;
+  show_share_buttons?: boolean;
+  theme?: string;
+  layout?: 'default' | 'wide' | 'narrow';
+}
+
+/** 结构化内容数据 */
+export interface StructuredContentData {
+  page_type: ContentPageType;
+  meta: ContentPageMeta;
+  global_settings: ContentGlobalSettings;
+  blocks: Array<{ meta: ContentBlockMeta;[key: string]: unknown }>;
+}
+
+/** 内容项响应 */
+export interface ContentItemResponse {
+  item_id: string;
+  title: string;
+  page_type: ContentPageType;
+  status: 'draft' | 'published' | 'archived';
+  content_version: number;
+  structured_content: StructuredContentData;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 内容列表响应 */
+export interface ContentListResponse {
+  items: ContentItemResponse[];
+  total: number;
+  page: number;
+  page_size: number;
+  has_more: boolean;
+}
+
+/** 保存结构化内容响应 */
+export interface SaveContentResponse {
+  success: boolean;
+  item_id: string;
+  content_version: number;
+  updated_at: string;
+}
+
+/** 部分更新响应 */
+export interface PatchContentResponse {
+  success: boolean;
+  path: string;
+  content_version: number;
+}
+
+/** 发布响应 */
+export interface PublishContentResponse {
+  success: boolean;
+  item_id: string;
+  status: 'published';
+  html_length: number;
+  published_at: string;
+  validation_warnings: string[];
+}
+
+/** 预览区块响应 */
+export interface PreviewSectionResponse {
+  section_index: number;
+  block_type: ContentBlockType;
+  html: string;
+}
+
+// ============ Content Library 类型定义 (STRUCTURED_CONTENT_FRONTEND_GUIDE.md) ============
+
+/** Topic Cluster 响应 */
+export interface TopicClusterResponse {
+  id: string;
+  user_id: string;
+  project_id: string;
+  name: string;
+  description: string | null;
+  status: 'draft' | 'active' | 'completed';
+  item_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Topic Cluster 列表响应 */
+export interface TopicClusterListResponse {
+  clusters: TopicClusterResponse[];
+  total: number;
+}
+
+/** Content Item 摘要（列表项） */
+export interface ContentItemSummary {
+  id: string;
+  title: string;
+  slug: string;
+  page_type: ContentPageType;
+  target_keyword: string;
+  status: 'draft' | 'ready' | 'in_progress' | 'review' | 'published';
+  priority: number; // 1-5
+  estimated_word_count: number | null;
+  topic_cluster_id: string | null;
+  topic_cluster_name: string | null;
+  project_id: string;
+  project_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Content Item 列表响应 */
+export interface ContentItemListResponse {
+  items: ContentItemSummary[];
+  total: number;
+}
+
+/** Content Item 详情响应 */
+export interface ContentItemDetailResponse {
+  id: string;
+  user_id: string;
+  project_id: string;
+  topic_cluster_id: string | null;
+  conversation_id: string | null;
+  title: string;
+  slug: string;
+  page_type: ContentPageType;
+  target_keyword: string;
+  seo_title: string | null;
+  seo_description: string | null;
+  outline: Record<string, unknown> | null;
+  keyword_data: Record<string, unknown> | null;
+  serp_insights: Record<string, unknown> | null;
+  reference_urls: string[] | null;
+  internal_links: Array<Record<string, unknown>> | null;
+  estimated_word_count: number | null;
+  priority: number;
+  status: string;
+  notes: string | null;
+  generated_content: string | null;
+  topic_cluster_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 列表内容项参数 */
+export interface ListItemsParams {
+  projectId?: string;
+  topicClusterId?: string;
+  status?: string;
+  pageType?: string;
+  limit?: number;
+  offset?: number;
 }
 
 // 导出单例实例

@@ -13,6 +13,8 @@ interface SSEStreamOptions {
   url: string;
   /** 认证 token */
   token: string;
+  /** 会话 token（用于在线时长统计） */
+  sessionToken?: string;
   /** 会话 ID */
   cid: string;
   /** 事件处理回调 */
@@ -55,9 +57,12 @@ export class SSEStream {
       return;
     }
 
-    const { url, token, cid } = this.options;
+    const { url, token, cid, sessionToken } = this.options;
     // SSE 通过 URL 参数传递认证信息（或使用 cookie）
-    const sseUrl = `${url}?cid=${encodeURIComponent(cid)}&token=${encodeURIComponent(token)}`;
+    let sseUrl = `${url}?cid=${encodeURIComponent(cid)}&token=${encodeURIComponent(token)}`;
+    if (sessionToken) {
+      sseUrl += `&session_id=${encodeURIComponent(sessionToken)}`;
+    }
 
     try {
       this.eventSource = new EventSource(sseUrl);
@@ -182,22 +187,25 @@ export class SSEStream {
   }
 }
 
+/** 附件引用类型 (IMAGE_UPLOAD_FRONTEND_GUIDE.md) */
+export interface SSEAttachmentRef {
+  type: 'image' | 'file';
+  s3Key: string;
+  mimeType: string;
+  purpose?: 'reference_image' | 'context' | 'other';
+}
+
 /**
  * SSE 发送消息需要通过单独的 HTTP 请求
  */
 export async function sendSSEMessage(
   cid: string,
   content: string,
-  attachments?: Array<{
-    type: 'file' | 'image';
-    url?: string;
-    content?: string;
-    name?: string;
-  }>
+  attachments?: SSEAttachmentRef[]
 ): Promise<{ messageId: string }> {
   return apiClient.post<{ messageId: string }>(`/chat/${cid}/messages`, {
     content,
-    attachments,
+    attachments: attachments && attachments.length > 0 ? attachments : undefined,
   });
 }
 
@@ -228,4 +236,3 @@ export async function stopSSEGeneration(cid: string): Promise<void> {
 export function createSSEStream(options: SSEStreamOptions): SSEStream {
   return new SSEStream(options);
 }
-

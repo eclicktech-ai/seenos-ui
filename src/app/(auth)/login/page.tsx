@@ -79,8 +79,9 @@ export default function LoginPage() {
     );
   }
 
-  // 如果已认证，显示加载状态直到跳转完成
-  if (isAuthenticated || isLoading) {
+  // 如果已认证（且不在验证中）或正在提交登录，显示加载状态直到跳转完成
+  // 注意：必须等待 authLoading 完成，否则会在 token 验证期间阻止用户看到登录表单
+  if ((isAuthenticated && !authLoading) || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>

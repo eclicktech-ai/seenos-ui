@@ -220,20 +220,20 @@ export default function OnboardingPage() {
           throw new Error("Failed to validate URL");
         }
 
-        // 更宽松的验证逻辑：
-        // 1. 如果后端返回了 normalized_url，说明格式基本正确
-        // 2. 如果 status_code 存在且不是明显的错误（4xx/5xx），也认为格式正确
-        // 3. 只拒绝明显的格式错误（没有 normalized_url 且 is_valid 明确为 false）
-        const hasNormalizedUrl = !!validationResult.normalized_url;
-        const hasValidStatusCode = validationResult.status_code !== undefined && 
-          validationResult.status_code !== 0 && 
-          validationResult.status_code < 500; // 允许 4xx（可能是防爬虫）
+        // More lenient validation logic:
+        // 1. If backend returns normalizedUrl, the format is basically correct
+        // 2. If statusCode exists and is not an obvious error (4xx/5xx), format is correct
+        // 3. Only reject obvious format errors (no normalizedUrl and isValid explicitly false)
+        const hasNormalizedUrl = !!validationResult.normalizedUrl;
+        const hasValidStatusCode = validationResult.statusCode !== undefined && 
+          validationResult.statusCode !== 0 && 
+          validationResult.statusCode < 500; // Allow 4xx (may be anti-crawler)
         
-        // 如果后端明确说格式无效，且没有 normalized_url，才拒绝
-        const isFormatInvalid = validationResult.is_valid === false && !hasNormalizedUrl;
+        // Only reject if backend explicitly says format is invalid and no normalizedUrl
+        const isFormatInvalid = validationResult.isValid === false && !hasNormalizedUrl;
         
         if (isFormatInvalid && !hasValidStatusCode) {
-          console.error("[Onboarding] Backend validation failed - is_valid:", validationResult.is_valid);
+          console.error("[Onboarding] Backend validation failed - isValid:", validationResult.isValid);
           setError(
             validationResult.error || 
             "Invalid URL format. Please check the URL and try again."
@@ -242,12 +242,12 @@ export default function OnboardingPage() {
           return;
         }
 
-        // 如果不可达或状态码不是 2xx，只显示警告但继续执行
-        // 因为有些网站可能有防爬虫机制，或者需要特殊处理
+        // If not reachable or status code is not 2xx, show warning but continue
+        // Some websites may have anti-crawler mechanisms or require special handling
         if (!validationResult.reachable || 
-            (validationResult.status_code !== undefined && 
-             validationResult.status_code >= 400 && 
-             validationResult.status_code < 500)) {
+            (validationResult.statusCode !== undefined && 
+             validationResult.statusCode >= 400 && 
+             validationResult.statusCode < 500)) {
           console.warn("URL may not be reachable:", validationResult.error);
           toast.warning("URL may not be reachable", {
             description: "We'll try to proceed anyway.",
@@ -255,7 +255,7 @@ export default function OnboardingPage() {
         }
 
         // Use normalized URL from validation
-        const normalizedUrl = validationResult.normalized_url || finalUrl;
+        const normalizedUrl = validationResult.normalizedUrl || finalUrl;
 
         // Extract domain from URL and save to localStorage
         try {
@@ -329,7 +329,7 @@ export default function OnboardingPage() {
           await reloadContextData();
         } catch (err) {
           console.warn("Failed to load context data, but continuing:", err);
-          // 不阻止流程，继续执行
+          // Don't block the flow, continue execution
         }
 
         // Step 4: Start Deep Research
@@ -523,7 +523,7 @@ export default function OnboardingPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      // 确保 onboarding 完成状态已设置
+                      // Ensure onboarding completed status is set
                       localStorage.setItem("seenos_onboarding_completed", "true");
                       router.push("/");
                     }}
@@ -539,7 +539,7 @@ export default function OnboardingPage() {
                       className="flex items-center justify-between p-2 rounded-md bg-background hover:bg-accent transition-colors cursor-pointer"
                       onClick={() => {
                         localStorage.setItem("seenos_current_project_id", project.id);
-                        // 确保 onboarding 完成状态已设置，否则会被重定向回来
+                        // Ensure onboarding completed status is set, otherwise will be redirected back
                         localStorage.setItem("seenos_onboarding_completed", "true");
                         router.push("/");
                       }}

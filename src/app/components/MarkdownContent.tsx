@@ -414,52 +414,73 @@ export const MarkdownContent = React.memo<MarkdownContentProps>(
     // 检测当前主题
     const isDark = typeof window !== "undefined" && document.documentElement.classList.contains("dark");
 
-    // 从 S3 URL 提取 cid 和文件路径
-    const extractS3FileInfo = useCallback((url: string): { cid: string; path: string } | null => {
-      const s3Pattern = /https?:\/\/seenos-context\.s3\.amazonaws\.com\/agent-files\/([^/]+)\/(.+)/;
-      const match = url.match(s3Pattern);
-      if (match) {
-        return {
-          cid: match[1],
-          path: match[2],
-        };
-      }
-      return null;
+    // 检查是否是 S3 URL
+    const isS3Url = useCallback((url: string): boolean => {
+      return url.includes('s3') && url.includes('amazonaws.com');
     }, []);
 
-    // 处理文件下载
+    // 处理文件下载（链接点击）
     const handleFileDownload = useCallback(async (e: React.MouseEvent, url: string) => {
       e.preventDefault();
       e.stopPropagation();
 
-      // 尝试从 URL 提取 cid 和 path
-      const s3Info = extractS3FileInfo(url);
-      const fileCid = cid || s3Info?.cid;
-      const filePath = s3Info?.path;
-
-      if (!fileCid || !filePath) {
-        // 如果无法提取信息，回退到直接下载
-        window.open(url, '_blank');
-        return;
+      // 提取文件名
+      let filename = 'download';
+      try {
+        const urlObj = new URL(url);
+        const lastSegment = urlObj.pathname.split('/').pop();
+        if (lastSegment) {
+          filename = decodeURIComponent(lastSegment);
+        }
+      } catch {
+        // 忽略
       }
 
+      // 如果是 S3 URL，使用代理下载
+      if (isS3Url(url)) {
+        setDownloadingUrl(url);
+        try {
+          await apiClient.proxyDownloadS3File(url, filename);
+          return;
+        } catch (error) {
+          console.error('[MarkdownContent] Proxy download failed:', error);
+        } finally {
+          setDownloadingUrl(null);
+        }
+      }
+
+      // 非 S3 或失败，尝试 fetch
       setDownloadingUrl(url);
       try {
-        const filename = filePath.split('/').pop() || 'download';
-        await apiClient.downloadConversationFile(fileCid, filePath, filename);
-      } catch (error) {
-        console.error('Failed to download file:', error);
-        // 如果 API 下载失败，回退到直接打开链接
-        window.open(url, '_blank');
+        const response = await fetch(url);
+        if (response.ok) {
+          const blob = await response.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(blobUrl);
+          return;
+        }
+      } catch {
+        // 忽略
       } finally {
         setDownloadingUrl(null);
       }
-    }, [cid, extractS3FileInfo]);
+
+      // 回退：打开新标签页
+      window.open(url, '_blank');
+    }, [isS3Url]);
 
     // 处理图片下载
-    const handleImageDownload = useCallback((e: React.MouseEvent, src: string, alt: string) => {
+    const handleImageDownload = useCallback(async (e: React.MouseEvent, src: string, alt: string) => {
       e.preventDefault();
       e.stopPropagation();
+
+      console.log('[MarkdownContent] handleImageDownload called:', { src, alt, cid });
 
       // 从 URL 提取文件名
       let filename = 'image';
@@ -488,15 +509,52 @@ export const MarkdownContent = React.memo<MarkdownContentProps>(
         }
       }
 
-      // 直接使用 <a download>，跨域时会打开新页面（浏览器限制，无法绕过）
-      const link = document.createElement('a');
-      link.href = src;
-      link.download = filename;
-      link.target = '_blank';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }, []);
+      setDownloadingUrl(src);
+
+      // 方法 1：如果是 S3 URL，使用后端代理下载（绕过 CORS）
+      if (isS3Url(src)) {
+        console.log('[MarkdownContent] Detected S3 URL, using proxy download...');
+        try {
+          await apiClient.proxyDownloadS3File(src, filename);
+          console.log('[MarkdownContent] Proxy download success');
+          setDownloadingUrl(null);
+          return;
+        } catch (error) {
+          console.error('[MarkdownContent] Proxy download failed:', error);
+          // 继续尝试其他方法
+        }
+      }
+
+      // 方法 2：使用 fetch + blob（适用于非 S3 或配置了 CORS 的 URL）
+      console.log('[MarkdownContent] Trying fetch + blob...');
+      try {
+        const response = await fetch(src);
+        if (response.ok) {
+          const blob = await response.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.download = filename;
+          link.style.display = 'none';
+          document.body.appendChild(link);
+          link.click();
+          setTimeout(() => {
+            document.body.removeChild(link);
+            URL.revokeObjectURL(blobUrl);
+          }, 100);
+          console.log('[MarkdownContent] Download via fetch success');
+          setDownloadingUrl(null);
+          return;
+        }
+      } catch (fetchError) {
+        console.error('[MarkdownContent] Fetch failed:', fetchError);
+      }
+
+      // 最终回退：打开新标签页
+      console.log('[MarkdownContent] Fallback: opening in new tab');
+      setDownloadingUrl(null);
+      window.open(src, '_blank');
+    }, [cid, isS3Url]);
 
     return (
       <>
@@ -530,77 +588,86 @@ export const MarkdownContent = React.memo<MarkdownContentProps>(
                 inline,
                 className: codeClassName,
                 children,
+                node,
                 ...props
               }: {
                 inline?: boolean;
                 className?: string;
                 children?: React.ReactNode;
+                node?: { position?: { start?: { line?: number }; end?: { line?: number } } };
               }) {
                 const match = /language-(\w+)/.exec(codeClassName || "");
                 const codeString = String(children).replace(/\n$/, "");
                 
-                // 代码块（非行内）
-                if (!inline) {
-                  // 有语言标识符，使用语法高亮
-                  if (match) {
-                    return (
-                      <div className="group relative my-4 last:mb-0">
-                        <div className="absolute left-3 top-0 -translate-y-1/2 rounded-md border border-border bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground shadow-sm">
-                          {match[1]}
-                        </div>
-                        <CopyButton code={codeString} />
-                        <SyntaxHighlighter
-                          style={isDark ? oneDark : oneLight}
-                          language={match[1]}
-                          PreTag="div"
-                          className="!mt-0 max-w-full rounded-lg border border-border text-sm"
-                          wrapLines={true}
-                          wrapLongLines={true}
-                          lineProps={{
-                            style: {
-                              wordBreak: "break-all",
-                              whiteSpace: "pre-wrap",
-                              overflowWrap: "break-word",
-                            },
-                          }}
-                          customStyle={{
-                            margin: 0,
-                            padding: "1rem",
-                            paddingTop: "1.5rem",
-                            maxWidth: "100%",
-                            overflowX: "auto",
-                            fontSize: "0.875rem",
-                            borderRadius: "0.5rem",
-                            background: isDark ? "#1e1e1e" : "#f8f8f8",
-                          }}
-                        >
-                          {codeString}
-                        </SyntaxHighlighter>
-                      </div>
-                    );
-                  }
-                  
-                  // 没有语言标识符的代码块，使用简单样式
+                // 更可靠的行内代码判断：
+                // 1. 明确标记为 inline
+                // 2. 没有语言标识符且不包含换行符
+                // 3. 节点只占一行
+                const hasNewline = codeString.includes('\n');
+                const isMultiLine = node?.position?.start?.line !== node?.position?.end?.line;
+                const isInlineCode = inline === true || (!match && !hasNewline && !isMultiLine);
+                
+                // 行内代码 - 必须返回行内元素，不能返回 div/pre
+                if (isInlineCode) {
+                  return (
+                    <code
+                      className="rounded border border-border/50 bg-background px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
+                      {...props}
+                    >
+                      {children}
+                    </code>
+                  );
+                }
+                
+                // 代码块（非行内）- 有语言标识符，使用语法高亮
+                if (match) {
                   return (
                     <div className="group relative my-4 last:mb-0">
+                      <div className="absolute left-3 top-0 -translate-y-1/2 rounded-md border border-border bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground shadow-sm">
+                        {match[1]}
+                      </div>
                       <CopyButton code={codeString} />
-                      <pre className="overflow-x-auto rounded-lg border border-border bg-muted/50 p-4 text-sm">
-                        <code className="font-mono text-foreground">
-                          {children}
-                        </code>
-                      </pre>
+                      <SyntaxHighlighter
+                        style={isDark ? oneDark : oneLight}
+                        language={match[1]}
+                        PreTag="div"
+                        className="!mt-0 max-w-full rounded-lg border border-border text-sm"
+                        wrapLines={true}
+                        wrapLongLines={true}
+                        lineProps={{
+                          style: {
+                            wordBreak: "break-all",
+                            whiteSpace: "pre-wrap",
+                            overflowWrap: "break-word",
+                          },
+                        }}
+                        customStyle={{
+                          margin: 0,
+                          padding: "1rem",
+                          paddingTop: "1.5rem",
+                          maxWidth: "100%",
+                          overflowX: "auto",
+                          fontSize: "0.875rem",
+                          borderRadius: "0.5rem",
+                          background: isDark ? "#1e1e1e" : "#f8f8f8",
+                        }}
+                      >
+                        {codeString}
+                      </SyntaxHighlighter>
                     </div>
                   );
                 }
                 
-                // 行内代码
+                // 没有语言标识符的代码块，使用简单样式
                 return (
-                  <code
-                    className="rounded border border-border/50 bg-background px-1.5 py-0.5 font-mono text-[0.85em] text-foreground"
-                    {...props}
-                  >
-                    {children}
-                  </code>
+                  <div className="group relative my-4 last:mb-0">
+                    <CopyButton code={codeString} />
+                    <pre className="overflow-x-auto rounded-lg border border-border bg-muted/50 p-4 text-sm">
+                      <code className="font-mono text-foreground">
+                        {children}
+                      </code>
+                    </pre>
+                  </div>
                 );
               },
               // 预格式化文本
@@ -837,16 +904,32 @@ export const MarkdownContent = React.memo<MarkdownContentProps>(
 
                 if (!src) return null;
 
+                const isDownloading = downloadingUrl === src;
+
                 // 直接使用原始 URL，不做任何处理
                 return (
                   <span className="group relative my-4 block">
                     <img
                       src={src}
                       alt={alt}
-                      className="max-w-full cursor-pointer rounded-lg shadow-sm transition-shadow hover:shadow-md"
+                      className="max-w-full rounded-lg shadow-sm transition-shadow hover:shadow-md"
                       loading="lazy"
-                      onClick={(e) => handleImageDownload(e, src, alt)}
                     />
+                    {/* 下载按钮 - hover 时显示 */}
+                    <button
+                      onClick={(e) => handleImageDownload(e, src, alt)}
+                      disabled={isDownloading}
+                      className="absolute top-2 right-2 flex items-center justify-center p-2 bg-black/60 rounded-lg 
+                                 opacity-0 group-hover:opacity-100 transition-opacity
+                                 hover:bg-black/80 text-white disabled:opacity-50"
+                      title="Download image"
+                    >
+                      {isDownloading ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <Download size={16} />
+                      )}
+                    </button>
                   </span>
                 );
               },

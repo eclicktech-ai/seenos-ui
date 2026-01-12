@@ -24,12 +24,13 @@ export function ChatProvider({
   transport = "websocket",
 }: ChatProviderProps) {
   // 从 AuthProvider 获取认证状态
-  const { token, isAuthenticated } = useAuth();
+  const { token, sessionToken, isAuthenticated } = useAuth();
 
   const chat = useChat({
     onHistoryRevalidate,
     transport,
     token,
+    sessionToken,
     isAuthenticated,
   });
 

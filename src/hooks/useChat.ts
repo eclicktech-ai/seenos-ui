@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useQueryState } from "nuqs";
 import { useStream, type StreamTransport } from "./useStream";
+import { useProgressStore } from "./useProgressStore";
 import { apiClient } from "@/lib/api/client";
 import type {
   Message,
@@ -12,6 +13,9 @@ import type {
   ConversationDetailResponse,
   InterruptData,
   PaginatedResponse,
+  PaginationInfo,
+  ToolProgress,
+  AttachmentRef,
 } from "@/types";
 
 // ============ 类型定义 ============
@@ -20,6 +24,7 @@ export interface UseChatOptions {
   onHistoryRevalidate?: () => void;
   transport?: StreamTransport;
   token?: string | null;
+  sessionToken?: string | null;
   isAuthenticated?: boolean;
   autoLoadLatest?: boolean;
   messageLoadDelay?: number;
@@ -33,6 +38,11 @@ export interface ChatState {
   isLoading: boolean;
   isConnected: boolean;
   error: Error | null;
+  // 新增：分页信息 (WEBSOCKET_FRONTEND_GUIDE.md)
+  pagination: PaginationInfo | null;
+  // 新增：重试状态 (WEBSOCKET_FRONTEND_GUIDE.md)
+  retryingTurnId: string | null;
+  retryAttempt: number;
 }
 
 const DEFAULT_MESSAGE_LOAD_DELAY = 180;  // 每条消息的延迟时间（毫秒）- 180ms 让用户能看到平滑的加载过程
@@ -46,6 +56,7 @@ export function useChat(options: UseChatOptions = {}) {
     onHistoryRevalidate, 
     transport = "websocket",
     token = null,
+    sessionToken = null,
     isAuthenticated = false,
     autoLoadLatest = true,
     messageLoadDelay = DEFAULT_MESSAGE_LOAD_DELAY,
@@ -67,17 +78,25 @@ export function useChat(options: UseChatOptions = {}) {
   // 实际使用的 cid
   const cid = urlCid || activeCid;
 
+  // 进度状态管理 (PROGRESS_EVENTS_FRONTEND_GUIDE.md)
+  const progressStore = useProgressStore();
+
   // Stream hook - 始终启用（如果已认证且有 token）
   // 不再依赖 cid，支持预连接
   const stream = useStream({
     cid,
     token: token || "",
+    sessionToken,
     transport,
     enabled: isAuthenticated && !!token,
     onDone: onHistoryRevalidate,
     onError: (error) => {
       console.error("[useChat] Stream error:", error);
     },
+    // 进度事件回调 (PROGRESS_EVENTS_FRONTEND_GUIDE.md)
+    onToolProgress: progressStore.handleToolProgress,
+    onToolRetry: progressStore.handleToolRetry,
+    onModelRetry: progressStore.handleModelRetry,
   });
 
   // 转换文件格式
@@ -257,8 +276,9 @@ export function useChat(options: UseChatOptions = {}) {
   }, [isCreating, setUrlCid, stream, onHistoryRevalidate]);
 
   // 发送消息（优化版：自动创建会话并发送）
+  // attachments: 可选参数，用于发送附件 (IMAGE_UPLOAD_FRONTEND_GUIDE.md)
   const sendMessage = useCallback(
-    async (content: string) => {
+    async (content: string, attachments?: AttachmentRef[]) => {
       let currentCid = cid;
 
       // 如果没有会话，先创建
@@ -301,9 +321,10 @@ export function useChat(options: UseChatOptions = {}) {
       }
 
       // 发送消息
-      console.log("[useChat] Sending message to cid:", currentCid);
+      // 传入 currentCid 确保使用正确的会话 ID（解决新会话创建时的时序问题）
+      console.log("[useChat] Sending message to cid:", currentCid, "attachments:", attachments?.length || 0);
       try {
-        await stream.sendMessage(content);
+        await stream.sendMessage(content, currentCid || undefined, attachments);
         onHistoryRevalidate?.();
       } catch (error) {
         console.error("Failed to send message:", error);
@@ -324,6 +345,9 @@ export function useChat(options: UseChatOptions = {}) {
       
       // 重置会话状态（清空消息等）
       stream.resetConversation();
+      
+      // 重置进度状态 (PROGRESS_EVENTS_FRONTEND_GUIDE.md)
+      progressStore.reset();
       
       // 主动连接到新的 cid（不依赖 useEffect）
       stream.connectToCid(newCid);
@@ -358,7 +382,7 @@ export function useChat(options: UseChatOptions = {}) {
           }
         });
     },
-    [stream, setUrlCid, cancelProgressiveLoad, loadMessagesProgressively]
+    [stream, setUrlCid, cancelProgressiveLoad, loadMessagesProgressively, progressStore]
   );
 
   // 删除会话
@@ -388,6 +412,9 @@ export function useChat(options: UseChatOptions = {}) {
     cancelProgressiveLoad();
     hasAutoLoadedRef.current = true;
     
+    // 重置进度状态 (PROGRESS_EVENTS_FRONTEND_GUIDE.md)
+    progressStore.reset();
+    
     try {
       // 调用 API 创建新会话
       const newCid = await createConversation();
@@ -399,7 +426,7 @@ export function useChat(options: UseChatOptions = {}) {
       await setUrlCid(null);
       setActiveCid(null);
     }
-  }, [createConversation, setUrlCid, stream, cancelProgressiveLoad]);
+  }, [createConversation, setUrlCid, stream, cancelProgressiveLoad, progressStore]);
 
   // 停止生成
   const stopStream = useCallback(() => {
@@ -454,6 +481,17 @@ export function useChat(options: UseChatOptions = {}) {
     isConnected: stream.isConnected,
     connectionState: stream.connectionState,
     error: stream.error,
+    // 新增：分页信息 (WEBSOCKET_FRONTEND_GUIDE.md)
+    pagination: stream.pagination,
+    // 新增：重试状态 (WEBSOCKET_FRONTEND_GUIDE.md)
+    retryingTurnId: stream.retryingTurnId,
+    retryAttempt: stream.retryAttempt,
+    // 新增：工具进度状态 (PROGRESS_EVENTS_FRONTEND_GUIDE.md)
+    toolProgress: progressStore.toolProgress,
+    toolProgressByName: progressStore.toolProgressByName,
+    modelRetrying: progressStore.modelRetrying,
+    modelRetryInfo: progressStore.modelRetryInfo,
+    hasRunningTools: progressStore.hasRunningTools,
 
     // 兼容旧 API
     email: undefined,
@@ -465,8 +503,14 @@ export function useChat(options: UseChatOptions = {}) {
     stopStream,
     resumeInterrupt,
     reconnect,
+    manualReconnect: stream.manualReconnect,
     cancelProgressiveLoad,
     setFiles,
+    // 新增方法 (WEBSOCKET_FRONTEND_GUIDE.md)
+    loadMoreMessages: stream.loadMoreMessages,
+    retryMessage: stream.retryMessage,
+    // 新增方法：进度状态管理 (PROGRESS_EVENTS_FRONTEND_GUIDE.md)
+    getToolProgress: progressStore.getToolProgress,
 
     // 会话管理
     createConversation,
@@ -490,4 +534,3 @@ export function useChat(options: UseChatOptions = {}) {
 }
 
 export type ChatContextType = ReturnType<typeof useChat>;
-

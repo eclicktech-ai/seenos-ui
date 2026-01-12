@@ -291,11 +291,28 @@ export default {
           from: { transform: "translateX(var(--radix-toast-swipe-end-x))" },
           to: { transform: "translateX(calc(100% + var(--viewport-padding)))" },
         },
+        shimmer: {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(100%)" },
+        },
+        "progress-flow": {
+          "0%": { left: "-40%", opacity: "0" },
+          "20%": { opacity: "1" },
+          "80%": { opacity: "1" },
+          "100%": { left: "100%", opacity: "0" },
+        },
+        "subtle-pulse": {
+          "0%, 100%": { opacity: "0.4" },
+          "50%": { opacity: "0.8" },
+        },
       },
       animation: {
         hide: "hide 100ms ease-in",
         slideIn: "slideIn 150ms cubic-bezier(0.16, 1, 0.3, 1)",
         swipeOut: "swipeOut 100ms ease-out",
+        shimmer: "shimmer 2s infinite ease-in-out",
+        "progress-flow": "progress-flow 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite",
+        "subtle-pulse": "subtle-pulse 2s ease-in-out infinite",
       },
     },
     typography: {

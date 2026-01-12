@@ -13,8 +13,15 @@ import { LeftSidebar } from "@/app/components/LeftSidebar";
 import { RightSidebar } from "@/app/components/RightSidebar";
 import { SettingsDialog } from "@/app/components/SettingsDialog";
 import { AnalysisStatusCard } from "@/app/components/AnalysisStatusCard";
+import { BlockEditorPanel, useEditorStore } from "@/app/components/BlockEditor";
+import { ContentSavedListener } from "@/app/components/ContentSavedToast";
+import { SessionReplacedListener } from "@/app/components/SessionReplacedListener";
+import { SessionExpiredBanner } from "@/app/components/SessionExpiredBanner";
+import { ConnectionStatusBanner } from "@/app/components/ConnectionStatusBanner";
+import { ProgressEventsListener } from "@/app/components/ProgressEventsListener";
 import { useConversations } from "@/hooks/useConversations";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -62,6 +69,7 @@ function useTheme() {
 // ============ 主内容组件 ============
 function MainContent() {
   const { todos, files, setFiles, isLoading, interrupt } = useChatContext();
+  const isEditorOpen = useEditorStore((state) => state.isEditorOpen);
 
   return (
     <ResizablePanelGroup
@@ -69,45 +77,67 @@ function MainContent() {
       autoSaveId="main-layout"
       className="h-full"
     >
-      {/* Left Sidebar */}
-      <ResizablePanel
-        id="left-sidebar"
-        order={1}
-        defaultSize={20}
-        minSize={15}
-      >
-        <LeftSidebar todos={todos} />
-      </ResizablePanel>
+      {/* Left Sidebar - 编辑模式下隐藏 */}
+      {!isEditorOpen && (
+        <>
+          <ResizablePanel
+            id="left-sidebar"
+            order={1}
+            defaultSize={20}
+            minSize={15}
+          >
+            <LeftSidebar todos={todos} />
+          </ResizablePanel>
 
-      <ResizableHandle className="relative w-2 bg-transparent hover:bg-border/10 transition-colors cursor-col-resize after:absolute after:inset-y-0 after:left-1/2 after:w-[1px] after:-translate-x-1/2 after:bg-transparent hover:after:bg-border/60" />
+          <ResizableHandle className="relative w-2 bg-transparent hover:bg-border/10 transition-colors cursor-col-resize after:absolute after:inset-y-0 after:left-1/2 after:w-[1px] after:-translate-x-1/2 after:bg-transparent hover:after:bg-border/60" />
+        </>
+      )}
 
       {/* Center - Chat Area */}
       <ResizablePanel
         id="chat-area"
         order={2}
-        defaultSize={60}
-        minSize={30}
-        className="flex flex-col"
+        defaultSize={isEditorOpen ? 30 : 60}
+        minSize={isEditorOpen ? 20 : 30}
+        className={cn("flex flex-col", isEditorOpen && "transition-all duration-300")}
       >
         <ChatInterface />
       </ResizablePanel>
 
-      <ResizableHandle className="relative w-2 bg-transparent hover:bg-border/10 transition-colors cursor-col-resize after:absolute after:inset-y-0 after:left-1/2 after:w-[1px] after:-translate-x-1/2 after:bg-transparent hover:after:bg-border/60" />
+      {/* 编辑模式：显示 Block Editor */}
+      {isEditorOpen ? (
+        <>
+          <ResizableHandle className="relative w-2 bg-transparent hover:bg-border/10 transition-colors cursor-col-resize after:absolute after:inset-y-0 after:left-1/2 after:w-[1px] after:-translate-x-1/2 after:bg-transparent hover:after:bg-border/60" />
 
-      {/* Right Sidebar */}
-      <ResizablePanel
-        id="right-sidebar"
-        order={3}
-        defaultSize={20}
-        minSize={15}
-      >
-        <RightSidebar
-          files={files}
-          setFiles={setFiles}
-          isLoading={isLoading}
-          interrupt={interrupt}
-        />
-      </ResizablePanel>
+          <ResizablePanel
+            id="block-editor-container"
+            order={3}
+            defaultSize={70}
+            minSize={50}
+          >
+            <BlockEditorPanel />
+          </ResizablePanel>
+        </>
+      ) : (
+        <>
+          <ResizableHandle className="relative w-2 bg-transparent hover:bg-border/10 transition-colors cursor-col-resize after:absolute after:inset-y-0 after:left-1/2 after:w-[1px] after:-translate-x-1/2 after:bg-transparent hover:after:bg-border/60" />
+
+          {/* Right Sidebar - 正常模式 */}
+          <ResizablePanel
+            id="right-sidebar"
+            order={3}
+            defaultSize={20}
+            minSize={15}
+          >
+            <RightSidebar
+              files={files}
+              setFiles={setFiles}
+              isLoading={isLoading}
+              interrupt={interrupt}
+            />
+          </ResizablePanel>
+        </>
+      )}
     </ResizablePanelGroup>
   );
 }
@@ -295,6 +325,8 @@ function AuthenticatedHome() {
 
   return (
     <>
+      {/* Session 过期提示横幅 (SESSION_EXPIRATION_FRONTEND_GUIDE.md) */}
+      <SessionExpiredBanner />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       <AnalysisStatusCard />
 
@@ -378,6 +410,14 @@ function AuthenticatedHome() {
         {/* Main Content */}
         <div className="flex-1 overflow-hidden pt-2">
           <ChatProvider onHistoryRevalidate={() => mutateConversations()}>
+            {/* 连接状态提示横幅（服务器重启/重连/连接失败） */}
+            <ConnectionStatusBanner />
+            {/* 监听 content_saved 事件并显示 Toast */}
+            <ContentSavedListener />
+            {/* 监听会话替换/连接事件 */}
+            <SessionReplacedListener />
+            {/* 监听工具/模型重试事件 (PROGRESS_EVENTS_FRONTEND_GUIDE.md) */}
+            <ProgressEventsListener />
             <MainContent />
           </ChatProvider>
         </div>

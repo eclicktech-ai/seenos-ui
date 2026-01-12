@@ -18,6 +18,7 @@ interface AuthState {
   user: User | null;
   settings: UserSettings | null;
   token: string | null;
+  sessionToken: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
 }
@@ -45,6 +46,7 @@ interface AuthContextValue extends AuthState {
 
 // ============ 常量 ============
 const TOKEN_KEY = "deep_agents_token";
+const SESSION_TOKEN_KEY = "deep_agents_session_token";
 const USER_KEY = "deep_agents_user";
 const SETTINGS_KEY = "deep_agents_settings";
 
@@ -61,6 +63,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     user: null,
     settings: null,
     token: null,
+    sessionToken: null,
     isLoading: true,
     isAuthenticated: false,
   });
@@ -83,11 +86,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
       try {
         const token = localStorage.getItem(TOKEN_KEY);
+        const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
         const userJson = localStorage.getItem(USER_KEY);
         const settingsJson = localStorage.getItem(SETTINGS_KEY);
 
         if (token) {
           apiClient.setToken(token);
+          apiClient.setSessionToken(sessionToken);
+          // Sync token to cookie for server-side API routes
+          document.cookie = `auth_token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
 
           // 尝试从本地存储恢复用户信息
           let user: User | null = null;
@@ -118,6 +125,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
               user,
               settings,
               token,
+              sessionToken,
               isLoading: true, // 仍然标记为 loading，等待 API 验证
               isAuthenticated: true,
             });
@@ -143,6 +151,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
               user,
               settings,
               token,
+              sessionToken,
               isLoading: false,
               isAuthenticated: true,
             });
@@ -150,9 +159,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
             // Token 无效，清除本地存储
             console.warn("Token validation failed:", error);
             localStorage.removeItem(TOKEN_KEY);
+            localStorage.removeItem(SESSION_TOKEN_KEY);
             localStorage.removeItem(USER_KEY);
             localStorage.removeItem(SETTINGS_KEY);
+            document.cookie = "auth_token=; path=/; max-age=0";
             apiClient.setToken(null);
+            apiClient.setSessionToken(null);
 
             hasInitializedRef.current = true;
 
@@ -160,6 +172,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
               user: null,
               settings: null,
               token: null,
+              sessionToken: null,
               isLoading: false,
               isAuthenticated: false,
             });
@@ -212,10 +225,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
         password,
       });
 
-      const { token, user } = response;
+      const { token, sessionToken, user } = response;
 
       // 设置 API 客户端 token（需要在调用 /auth/me 之前设置）
       apiClient.setToken(token);
+      apiClient.setSessionToken(sessionToken ?? null);
 
       // 登录响应可能不包含完整信息（如 isAdmin），调用 /auth/me 获取完整数据
       // /auth/me 返回的 settings 更完整，包含 showTokenUsage 等字段
@@ -237,13 +251,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       // 保存到本地存储
       localStorage.setItem(TOKEN_KEY, token);
+      if (sessionToken) {
+        localStorage.setItem(SESSION_TOKEN_KEY, sessionToken);
+      } else {
+        localStorage.removeItem(SESSION_TOKEN_KEY);
+      }
       localStorage.setItem(USER_KEY, JSON.stringify(userWithAdmin));
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+      
+      // Also store token in cookie for server-side API routes
+      document.cookie = `auth_token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
 
       setState({
         user: userWithAdmin,
         settings,
         token,
+        sessionToken: sessionToken ?? null,
         isLoading: false,
         isAuthenticated: true,
       });
@@ -277,16 +300,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } finally {
       // 清除本地存储
       localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(SESSION_TOKEN_KEY);
       localStorage.removeItem(USER_KEY);
       localStorage.removeItem(SETTINGS_KEY);
+      document.cookie = "auth_token=; path=/; max-age=0";
 
       // 清除 API 客户端 token
       apiClient.setToken(null);
+      apiClient.setSessionToken(null);
 
       setState({
         user: null,
         settings: null,
         token: null,
+        sessionToken: null,
         isLoading: false,
         isAuthenticated: false,
       });
@@ -444,4 +471,3 @@ export function useIsAuthenticated(): boolean {
   const { isAuthenticated } = useAuth();
   return isAuthenticated;
 }
-

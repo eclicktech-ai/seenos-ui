@@ -10,4 +10,31 @@ export {
 } from './useConversations';
 export { useSuggestions, type Suggestion } from './useSuggestions';
 export { usePlaybooks } from './usePlaybooks';
-
+export { useMessageRetry, type UseMessageRetryReturn } from './useMessageRetry';
+export { useFeedback, type UseFeedbackReturn } from './useFeedback';
+export {
+  useStructuredContent,
+  type UseStructuredContentOptions,
+  type UseStructuredContentReturn,
+  VersionConflictError,
+} from './useStructuredContent';
+export {
+  useContentLibrary,
+  type UseContentLibraryOptions,
+  type UseContentLibraryReturn,
+} from './useContentLibrary';
+export {
+  useProgressStore,
+  formatDuration,
+  type UseProgressStoreReturn,
+} from './useProgressStore';
+export {
+  useImageUpload,
+  validateImage,
+  type UseImageUploadOptions,
+  type UseImageUploadReturn,
+} from './useImageUpload';
+export {
+  useSession,
+  sessionService,
+} from './useSession';

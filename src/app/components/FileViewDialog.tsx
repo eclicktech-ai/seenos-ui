@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { MarkdownContent } from "@/app/components/MarkdownContent";
 import type { FileItem } from "@/app/types/types";
 import useSWRMutation from "swr/mutation";
+import { apiClient } from "@/lib/api/client";
 
 // CSV 解析函数
 const parseCSV = (content: string): string[][] => {
@@ -497,16 +498,56 @@ export const FileViewDialog = React.memo<{
     }
   }, [fileContent]);
 
-  const handleDownload = useCallback(() => {
-    // 如果是二进制文件，直接使用downloadUrl下载
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  // 检查是否是 S3 URL
+  const isS3Url = useCallback((url: string): boolean => {
+    return url.includes('s3') && url.includes('amazonaws.com');
+  }, []);
+
+  const handleDownload = useCallback(async () => {
+    const downloadFileName = fileName || file?.path.split('/').pop() || 'download';
+
+    // 如果是二进制文件，使用 API 代理下载
     if (file?.isBinary && file?.downloadUrl) {
-      const a = document.createElement("a");
-      a.href = file.downloadUrl;
-      a.download = fileName || file.path.split('/').pop() || 'download';
-      a.target = '_blank';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      setIsDownloading(true);
+      
+      // 如果是 S3 URL，使用代理下载
+      if (isS3Url(file.downloadUrl)) {
+        try {
+          await apiClient.proxyDownloadS3File(file.downloadUrl, downloadFileName);
+          return;
+        } catch (error) {
+          console.error('[FileViewDialog] Proxy download failed:', error);
+          // 回退到其他方式
+        } finally {
+          setIsDownloading(false);
+        }
+      }
+      
+      // 非 S3：尝试 fetch + blob
+      try {
+        const response = await fetch(file.downloadUrl, { mode: 'cors' });
+        if (response.ok) {
+          const blob = await response.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = blobUrl;
+          a.download = downloadFileName;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(blobUrl);
+          return;
+        }
+      } catch {
+        // CORS 失败
+      } finally {
+        setIsDownloading(false);
+      }
+      
+      // 最终回退：新标签页打开
+      window.open(file.downloadUrl, '_blank');
       return;
     }
     
@@ -522,7 +563,7 @@ export const FileViewDialog = React.memo<{
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }
-  }, [fileContent, fileName, file]);
+  }, [fileContent, fileName, file, isS3Url]);
 
   const handleEdit = useCallback(() => {
     setIsEditingMode(true);
@@ -556,7 +597,7 @@ export const FileViewDialog = React.memo<{
       open={true}
       onOpenChange={onClose}
     >
-      <DialogContent className="flex h-[80vh] max-h-[80vh] min-w-[60vw] flex-col p-6" showCloseButton={false}>
+      <DialogContent className="flex h-[80vh] max-h-[80vh] w-[90vw] !max-w-6xl flex-col p-6 sm:!max-w-6xl" showCloseButton={false}>
         <DialogTitle className="sr-only">
           {file?.path || "New File"}
         </DialogTitle>
@@ -653,11 +694,13 @@ export const FileViewDialog = React.memo<{
                   variant="ghost"
                   size="sm"
                   className="h-8 px-3 text-gray-600 hover:bg-gray-100 hover:text-gray-800"
+                  disabled={isDownloading}
                 >
-                  <Download
-                    size={16}
-                    className="mr-1"
-                  />
+                  {isDownloading ? (
+                    <Loader2 size={16} className="mr-1 animate-spin" />
+                  ) : (
+                    <Download size={16} className="mr-1" />
+                  )}
                   Download
                 </Button>
               </>
@@ -696,10 +739,29 @@ export const FileViewDialog = React.memo<{
           ) : (
             <ScrollArea className="h-full rounded-md bg-gray-50">
               <div className="p-4">
-                {file?.isBinary && file?.downloadUrl ? (
+                {/* 修复：二进制文件判断 - 只要 isBinary=true 或 有 downloadUrl，都视为二进制 */}
+                {file?.isBinary || (file?.downloadUrl && !fileContent) ? (
                   // 二进制文件：显示预览和下载
                   <div className="flex h-full flex-col">
-                    {isImage && !previewError ? (
+                    {/* 修复：如果没有 downloadUrl，显示错误提示 */}
+                    {!file?.downloadUrl ? (
+                      <div className="flex flex-col items-center justify-center p-12">
+                        <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-6 text-center max-w-md">
+                          <FileText size={48} className="mx-auto mb-4 text-red-400" />
+                          <p className="mb-2 text-sm font-medium text-red-700">
+                            Binary File - URL Missing
+                          </p>
+                          <p className="mb-4 text-xs text-red-600">
+                            This is a binary file ({fileExtension.toUpperCase()}), but the download URL is not available. 
+                            The file may not have been properly uploaded or the link has expired.
+                          </p>
+                          <p className="text-xs text-gray-600">
+                            File: {file?.path}
+                            {file?.fileSize && ` (${(file.fileSize / 1024).toFixed(2)} KB)`}
+                          </p>
+                        </div>
+                      </div>
+                    ) : isImage && !previewError ? (
                       // 图片文件：直接显示图片
                       <div className="flex h-full flex-col">
                         <div className="mb-2 flex items-center justify-between rounded-lg bg-gray-50 p-3">
@@ -714,24 +776,14 @@ export const FileViewDialog = React.memo<{
                               </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              onClick={() => window.open(file.downloadUrl, '_blank')}
-                              variant="outline"
-                              size="sm"
-                              className="border-gray-300"
-                            >
-                              Open in New Tab
-                            </Button>
-                            <Button
-                              onClick={handleDownload}
-                              size="sm"
-                              className="bg-teal-600 text-white hover:bg-teal-700"
-                            >
-                              <Download size={16} className="mr-2" />
-                              Download
-                            </Button>
-                          </div>
+                          <Button
+                            onClick={() => window.open(file.downloadUrl, '_blank')}
+                            variant="outline"
+                            size="sm"
+                            className="border-gray-300"
+                          >
+                            Open in New Tab
+                          </Button>
                         </div>
                         <div className="flex-1 overflow-auto rounded-lg border border-gray-200 bg-white relative flex items-center justify-center p-4">
                           {isPreviewLoading && !previewError ? (
@@ -774,24 +826,14 @@ export const FileViewDialog = React.memo<{
                               </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              onClick={() => window.open(file.downloadUrl, '_blank')}
-                              variant="outline"
-                              size="sm"
-                              className="border-gray-300"
-                            >
-                              Open in New Tab
-                            </Button>
-                            <Button
-                              onClick={handleDownload}
-                              size="sm"
-                              className="bg-teal-600 text-white hover:bg-teal-700"
-                            >
-                              <Download size={16} className="mr-2" />
-                              Download
-                            </Button>
-                          </div>
+                          <Button
+                            onClick={() => window.open(file.downloadUrl, '_blank')}
+                            variant="outline"
+                            size="sm"
+                            className="border-gray-300"
+                          >
+                            Open in New Tab
+                          </Button>
                         </div>
                         <div className="flex-1 overflow-hidden rounded-lg border border-gray-200 bg-white relative">
                           {isPreviewLoading && !previewError ? (
@@ -857,19 +899,25 @@ export const FileViewDialog = React.memo<{
                     ) : (
                       // 其他二进制文件或预览失败：显示下载链接
                       <div className="flex flex-col items-center justify-center p-12">
-                        <div className="mb-4 rounded-lg bg-gray-100 p-6 text-center">
+                        <div className="mb-4 rounded-lg bg-gray-100 p-6 text-center max-w-md">
                           <FileText size={48} className="mx-auto mb-4 text-gray-400" />
                           <p className="mb-2 text-sm font-medium text-gray-700">
                             {previewError && (isDocument || isImage) ? 'Preview Unavailable' : 'Binary File'}
                           </p>
-                          <p className="mb-4 text-xs text-gray-500">
-                            {file.fileSize ? `Size: ${(file.fileSize / 1024).toFixed(2)} KB` : 'This is a binary file'}
-                            {previewError && (isDocument || isImage) && (
-                              <span className="block mt-2 text-orange-600">
-                                Preview is not available. Please download to view.
-                              </span>
-                            )}
-                          </p>
+                          {file.fileSize && (
+                            <p className="mb-2 text-xs text-gray-500">
+                              Size: {(file.fileSize / 1024).toFixed(2)} KB
+                            </p>
+                          )}
+                          {previewError && (isDocument || isImage) ? (
+                            <p className="mb-4 text-xs text-orange-600 font-medium">
+                              Preview is not available. Please download to view.
+                            </p>
+                          ) : (
+                            <p className="mb-4 text-xs text-gray-500">
+                              This is a binary file
+                            </p>
+                          )}
                           <div className="flex gap-2 justify-center">
                             {previewError && (isDocument || isImage) && (
                               <Button
@@ -878,6 +926,7 @@ export const FileViewDialog = React.memo<{
                                   window.open(file.downloadUrl, '_blank');
                                 }}
                                 variant="outline"
+                                size="sm"
                                 className="border-gray-300"
                               >
                                 Open in New Tab
@@ -885,6 +934,7 @@ export const FileViewDialog = React.memo<{
                             )}
                             <Button
                               onClick={handleDownload}
+                              size="sm"
                               className="bg-teal-600 text-white hover:bg-teal-700"
                             >
                               <Download size={16} className="mr-2" />

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useContext } from "react";
 import { 
   FileText, 
   BookOpen, 
@@ -8,14 +8,24 @@ import {
   Settings2, 
   Activity, 
   Layers, 
-  FolderDown
+  FolderDown,
+  Loader2,
+  Edit3,
+  LayoutGrid,
+  Library,
+  Files,
 } from "lucide-react";
+import { apiClient } from "@/lib/api/client";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { FileItem } from "@/app/types/types";
 import { FileViewDialog } from "@/app/components/FileViewDialog";
 import { PlaybookDialog } from "@/app/components/PlaybookDialog";
 import { type Playbook, type PlaybookCategory } from "@/data/playbooks";
-import { useChatContext } from "@/providers/ChatProvider";
+import { ChatContext } from "@/providers/ChatProvider";
+import { useEditorStore } from "@/app/components/BlockEditor";
+import { ContentLibraryPanel } from "@/app/components/ContentLibrary";
 
 interface RightSidebarProps {
   files: Record<string, string> | Record<string, FileItem>;
@@ -70,8 +80,9 @@ export const RightSidebar = React.memo<RightSidebarProps>(
     const [dialogOpen, setDialogOpen] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState<PlaybookCategory | null>(null);
     
-    // Get sendMessage from context
-    const { sendMessage } = useChatContext();
+    // Get sendMessage from context (使用可选的 context 避免抛出错误)
+    const chatContext = useContext(ChatContext);
+    const sendMessage = chatContext?.sendMessage;
 
     const handleSaveFile = useCallback(
       async (fileName: string, content: string) => {
@@ -128,7 +139,9 @@ ${playbook.outputs.map(o => `- ${o}`).join('\n')}${formDataSection}
 
 ${customInstructions ? `Custom Instructions:\n${customInstructions}` : ''}`;
       
-      sendMessage(prompt);
+      if (sendMessage) {
+        sendMessage(prompt);
+      }
     };
 
     // Filter out internal large_tool_results files
@@ -147,146 +160,231 @@ ${customInstructions ? `Custom Instructions:\n${customInstructions}` : ''}`;
       return String(rawContent || "");
     }, [files]);
 
-    const handleDownloadAll = useCallback(() => {
+    const [isDownloadingAll, setIsDownloadingAll] = useState(false);
+
+    // 检查是否是 S3 URL
+    const isS3Url = useCallback((url: string): boolean => {
+      return url.includes('s3') && url.includes('amazonaws.com');
+    }, []);
+
+    const handleDownloadAll = useCallback(async () => {
       if (visibleFiles.length === 0) return;
 
-      visibleFiles.forEach((filePath) => {
-        const rawFile = files[filePath];
-        const fileName = filePath.split("/").pop() || filePath;
-        
-        // 如果是二进制文件，直接使用 downloadUrl
-        if (typeof rawFile === "object" && rawFile !== null && "isBinary" in rawFile && (rawFile as FileItem).isBinary && (rawFile as FileItem).downloadUrl) {
-          const link = document.createElement("a");
-          link.href = (rawFile as FileItem).downloadUrl!;
-          link.download = fileName;
-          link.target = '_blank';
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-        } else {
-          // 文本文件：创建 blob 下载
-          const fileContent = getFileContent(filePath);
-          const blob = new Blob([fileContent], { type: "text/plain" });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement("a");
-          link.href = url;
-          link.download = fileName;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
+      setIsDownloadingAll(true);
+      
+      try {
+        // 逐个下载文件，添加延迟避免请求过快
+        for (const filePath of visibleFiles) {
+          const rawFile = files[filePath];
+          const fileName = filePath.split("/").pop() || filePath;
+          
+          // 如果是二进制文件，使用代理下载
+          if (typeof rawFile === "object" && rawFile !== null && "isBinary" in rawFile && (rawFile as FileItem).isBinary && (rawFile as FileItem).downloadUrl) {
+            const downloadUrl = (rawFile as FileItem).downloadUrl!;
+            
+            // S3 文件：使用代理下载
+            if (isS3Url(downloadUrl)) {
+              try {
+                await apiClient.proxyDownloadS3File(downloadUrl, fileName);
+                await new Promise(resolve => setTimeout(resolve, 500));
+                continue;
+              } catch (error) {
+                console.error('[RightSidebar] Proxy download failed:', error);
+              }
+            }
+            
+            // 非 S3：尝试 fetch + blob
+            try {
+              const response = await fetch(downloadUrl, { mode: 'cors' });
+              if (response.ok) {
+                const blob = await response.blob();
+                const blobUrl = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.href = blobUrl;
+                link.download = fileName;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(blobUrl);
+                await new Promise(resolve => setTimeout(resolve, 500));
+                continue;
+              }
+            } catch {
+              // CORS 失败，打开新标签页
+              window.open(downloadUrl, '_blank');
+            }
+          } else {
+            // 文本文件：创建 blob 下载
+            const fileContent = getFileContent(filePath);
+            const blob = new Blob([fileContent], { type: "text/plain" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            await new Promise(resolve => setTimeout(resolve, 300));
+          }
         }
-      });
-    }, [visibleFiles, getFileContent, files]);
+      } finally {
+        setIsDownloadingAll(false);
+      }
+    }, [visibleFiles, getFileContent, files, isS3Url]);
+
+    // 当前 Tab 状态
+    const [activeTab, setActiveTab] = useState<"content" | "artifacts">("content");
 
     return (
       <div className="flex h-full flex-col p-2 pl-0">
         <div className="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-background">
-          {/* Playbooks Module - Top Section (fixed height) */}
+          {/* Playbooks Module - Top Section (compact) */}
           <div className="group/playbooks flex-shrink-0">
-            <div className="flex h-12 items-center gap-2 px-4 border-b border-border bg-muted/30">
-              <Layers size={16} className="text-muted-foreground" />
-              <span className="text-sm font-semibold tracking-wide">
+            <div className="flex h-10 items-center gap-2 px-3 border-b border-border bg-muted/30">
+              <Layers size={14} className="text-muted-foreground" />
+              <span className="text-xs font-semibold tracking-wide">
                 Playbooks
               </span>
             </div>
-            <div className="px-4 py-4">
-              <div className="grid grid-cols-2 gap-2">
+            <div className="px-3 py-2">
+              <div className="grid grid-cols-2 gap-1.5">
                 {playbooks.map((playbook) => (
                   <button
                     key={playbook.id}
                     onClick={() => handlePlaybookClick(playbook.id)}
-                    className="flex flex-col items-center justify-center gap-2 rounded-lg border border-border bg-card p-4 transition-all hover:border-primary/50 hover:bg-accent"
+                    className="flex items-center gap-2 rounded-md border border-border bg-card px-2 py-1.5 transition-all hover:border-primary/50 hover:bg-accent"
                   >
                     <div className="text-muted-foreground">{playbook.icon}</div>
-                    <span className="text-sm font-medium">{playbook.label}</span>
+                    <span className="text-xs font-medium truncate">{playbook.label}</span>
                   </button>
                 ))}
               </div>
             </div>
           </div>
 
-          {/* Artifacts Module - Bottom Section (fills remaining space) */}
-          <div className="group/artifacts flex min-h-0 flex-1 flex-col">
-            <div className="flex h-12 flex-shrink-0 items-center justify-between gap-2 px-4 border-b border-border bg-muted/30">
-              <div className="flex items-center gap-2">
-                <FileText size={16} className="text-muted-foreground" />
-                <span className="text-sm font-semibold tracking-wide">
+          {/* Bottom Section - Tabs for Content Library and Artifacts */}
+          <Tabs
+            value={activeTab}
+            onValueChange={(v) => setActiveTab(v as "content" | "artifacts")}
+            className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden"
+          >
+            {/* Tab Header */}
+            <div className="flex-shrink-0 border-b border-border bg-muted/30 px-4">
+              <TabsList className="h-10 w-full justify-start gap-1 bg-transparent p-0">
+                <TabsTrigger
+                  value="content"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-t-md"
+                >
+                  <Library size={14} />
+                  Content
+                </TabsTrigger>
+                <TabsTrigger
+                  value="artifacts"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-t-md"
+                >
+                  <Files size={14} />
                   Artifacts
-                </span>
-                {visibleFiles.length > 0 && (
-                  <span className="rounded-full bg-foreground px-2 py-0.5 text-xs font-medium text-background">
-                    {visibleFiles.length}
-                  </span>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={handleDownloadAll}
-                className="opacity-0 group-hover/artifacts:opacity-100 transition-opacity p-1.5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground"
-                title="Download All"
-              >
-                <FolderDown size={16} />
-              </button>
+                  {visibleFiles.length > 0 && (
+                    <span className="ml-1 rounded-full bg-foreground px-1.5 py-0.5 text-[10px] font-medium text-background">
+                      {visibleFiles.length}
+                    </span>
+                  )}
+                </TabsTrigger>
+              </TabsList>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-hidden">
-              {visibleFiles.length === 0 ? (
-                <div className="flex h-full items-center justify-center px-4 pb-4">
-                  <p className="text-xs text-muted-foreground">
-                    No artifacts created yet
-                  </p>
+            {/* Content Library Tab */}
+            <TabsContent 
+              value="content" 
+              className="m-0 min-h-0 overflow-hidden data-[state=inactive]:hidden data-[state=active]:flex-1"
+            >
+              <ContentLibraryPanel className="h-full" />
+            </TabsContent>
+
+            {/* Artifacts Tab */}
+            <TabsContent value="artifacts" className="m-0 min-h-0 flex flex-col data-[state=inactive]:hidden data-[state=active]:flex-1">
+              <div className="group/artifacts flex min-h-0 flex-1 flex-col">
+                {/* Download All Button */}
+                <div className="flex-shrink-0 flex items-center justify-end px-4 py-2 border-b border-border">
+                  <button
+                    type="button"
+                    onClick={handleDownloadAll}
+                    disabled={isDownloadingAll || visibleFiles.length === 0}
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50 transition-colors"
+                    title="Download All"
+                  >
+                    {isDownloadingAll ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <FolderDown size={14} />
+                    )}
+                    Download All
+                  </button>
                 </div>
-              ) : (
-                <ScrollArea className="h-full px-4 py-4">
-                  <div className="space-y-1">
-                    {visibleFiles.map((filePath) => {
-                      const rawFile = files[filePath];
-                      const fileName = filePath.split("/").pop() || filePath;
 
-                      // 处理文件项：支持字符串格式和 FileItem 对象格式
-                      let fileItem: FileItem;
-                      if (typeof rawFile === "object" && rawFile !== null && "path" in rawFile) {
-                        // 已经是 FileItem 格式（可能是二进制文件）
-                        fileItem = rawFile as FileItem;
-                      } else {
-                        // 字符串格式或包含 content 的对象
-                        const fileContent = getFileContent(filePath);
-                        fileItem = {
-                          path: filePath,
-                          content: fileContent,
-                        };
-                      }
+                <div className="min-h-0 flex-1 overflow-hidden">
+                  {visibleFiles.length === 0 ? (
+                    <div className="flex h-full items-center justify-center px-4 pb-4">
+                      <div className="text-center">
+                        <Files size={32} className="mx-auto mb-2 text-muted-foreground/40" />
+                        <p className="text-xs text-muted-foreground">
+                          No files yet
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <ScrollArea className="h-full px-4 py-4">
+                      <div className="space-y-1">
+                        {visibleFiles.map((filePath) => {
+                          const rawFile = files[filePath];
+                          const fileName = filePath.split("/").pop() || filePath;
 
-                      const fileExt = getFileExtension(fileName);
+                          // 处理文件项：支持字符串格式和 FileItem 对象格式
+                          let fileItem: FileItem;
+                          if (typeof rawFile === "object" && rawFile !== null && "path" in rawFile) {
+                            // 已经是 FileItem 格式（可能是二进制文件）
+                            fileItem = rawFile as FileItem;
+                          } else {
+                            // 字符串格式或包含 content 的对象
+                            const fileContent = getFileContent(filePath);
+                            fileItem = {
+                              path: filePath,
+                              content: fileContent,
+                            };
+                          }
 
-                      return (
-                        <div
-                          key={filePath}
-                          className="group relative flex w-full items-center gap-2 rounded-md border border-transparent px-3 py-2 text-left transition-colors hover:border-border hover:bg-accent"
-                        >
-                          <button
-                            type="button"
-                            onClick={() => setSelectedFile(fileItem)}
-                            className="flex flex-1 items-center gap-2 min-w-0"
-                          >
-                            {/* File extension badge - light gray with rounded corners */}
-                            <span className="flex-shrink-0 rounded-sm bg-muted px-1.5 py-0.5 text-[10px] font-medium leading-none text-foreground">
-                              .{fileExt}
-                            </span>
-                            {/* File name with ellipsis truncation - left aligned */}
-                            <p className="min-w-0 flex-1 truncate text-left text-sm font-medium text-foreground">
-                              {fileName}
-                            </p>
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </ScrollArea>
-              )}
-            </div>
-          </div>
+                          const fileExt = getFileExtension(fileName);
+
+                          return (
+                            <div
+                              key={filePath}
+                              className="group relative flex w-full items-center gap-2 rounded-md border border-transparent px-3 py-2 text-left transition-colors hover:border-border hover:bg-accent"
+                            >
+                              <button
+                                type="button"
+                                onClick={() => setSelectedFile(fileItem)}
+                                className="flex flex-1 items-center gap-2 min-w-0"
+                              >
+                                {/* File extension badge - light gray with rounded corners */}
+                                <span className="flex-shrink-0 rounded-sm bg-muted px-1.5 py-0.5 text-[10px] font-medium leading-none text-foreground">
+                                  .{fileExt}
+                                </span>
+                                {/* File name with ellipsis truncation - left aligned */}
+                                <p className="min-w-0 flex-1 truncate text-left text-sm font-medium text-foreground">
+                                  {fileName}
+                                </p>
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </ScrollArea>
+                  )}
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
         </div>
 
         {selectedFile && (
